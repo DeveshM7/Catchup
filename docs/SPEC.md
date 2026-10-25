@@ -1,75 +1,73 @@
 # Catchup — Product Spec
 
-_Working name. Last updated: 2026-10-24 (Cal Hacks 13.0)._
+_Working name. Last updated: 2026-10-25. Roadmap in D35._
 
 ## One line
 
-Catchup shows how a codebase works, how it got that way, and what your uncommitted changes are about to do to it — computed from the code and git history, explained by Claude.
+Catchup lets a developer keep track of what their code does, what it used to do, how it changed, and what their uncommitted changes are about to do, as architecture and flow diagrams you can zoom from "what is this app" down to a single function.
 
 ## The problem
 
 - Coding agents change large projects faster than a person can follow. After a few days you no longer know your own codebase.
 - Opening an unfamiliar repo, it's hard to see what the parts are, how a request actually runs through them, and how the design evolved.
-- Existing tools show a repo's current state (DeepWiki, Archify) or one PR's diff (unkode, PR Lens). Nothing shows the architecture's history as a timelapse together with a preview of your next change.
+- Existing tools show a repo's current state (DeepWiki, Archify) or one PR's diff (unkode, PR Lens). None lets you choose your depth, and none shows how flows changed over time together with a preview of your next change.
 
 ## Who it's for
 
-Developers working on large or unfamiliar repos — especially solo developers and students running long Claude Code projects (the named community for the Anthropic track).
+Any developer on a repo: someone new who needs the big picture fast, and the person who wrote it who needs to see what changed without being buried in explanations. Same tool, different depth (zoom) and amount of text (familiarity toggle).
 
-## Core use cases
+## The three parts (built in this order, D35)
 
-1. **Understand an existing repo.** Clone any repo, run `catchup init`, and see its components, its main runtime flows, and a timelapse of how they evolved.
-2. **Review changes before committing.** See what your uncommitted (often agent-written) changes do to the architecture and flows before you commit.
-3. **Follow a project over time.** Every commit adds a frame; replay how the system changed and why.
-4. **Ask why.** Click any component, flow step or change and ask questions; answers cite files and commits.
+### Part 1 — Understand (Builds 1–4)
+
+- **One tree, two views (D37).** *Architecture:* the system → its main parts → sub-parts → files → functions. *Flows:* the main journeys ("send a chat message") → their steps → sub-steps → call tree → source. Steps show which parts they run through; parts show which journeys use them.
+- **Zoom by clicking.** Click a box to open what's inside it; breadcrumbs take you back up. Big areas have more levels, small ones fewer (Claude picks the depth, code sets limits).
+- **Text where it helps.** Each box has a short and a long description. A **familiarity toggle** (new / familiar / expert, D40) picks how much text shows, where you start, and whether error paths and code names appear. You can switch it any time.
+- **End to end.** Journeys start where the user acts (a page, a button, a CLI command, a library call) and follow the code through the client, the server, the AI model and outside systems, and back (D39).
+- **Real code underneath.** Every box points to real files and functions; the deepest level is the source.
+
+### Part 2 — Ask (Build 5)
+
+- Ask in a general chat, or on any box. A read-only agent answers, citing functions, files and (later) commits; the boxes it talks about are highlighted on the diagram.
+
+### Part 3 — Changes (Builds 6–9)
+
+- **Snapshots per commit.** Catchup knows what the code did at each commit; unchanged parts keep the same boxes, names and text.
+- **Live preview.** Uncommitted changes are analyzed as you save; the diagram puts what changed first: added, changed and removed parts and steps, and behavior changes such as "now writes to Redis" or "a sign-in check was removed".
+- **Ask about changes.** Ask why a part or step changed, or what a change will affect.
+- **Timelapse A → B.** Play the changes between two commits, with highlights and short captions citing commits.
 
 ## What the user sees
 
-A local web dashboard (`catchup open`):
+A local web dashboard (`catchup open`), Archify-inspired look (D28):
 
-- **Map** — components as boxes, dependencies as arrows, external systems (Postgres, Stripe, queues) as their own boxes. Same layout across all of history.
-- **Flows** — each entry point (e.g. `POST /login`) as 4–8 readable steps, drawn as an animated path across the map. Click a step to expand it; click again to reach the code.
-- **Overview** — flows grouped into 3–7 areas (e.g. Auth, Payments, Background jobs); parallel processes shown as lanes.
-- **Timelapse** — play or scrub ~15 checkpoints; green = added, amber = changed, red = removed; one caption per step citing commits.
-- **Preview** — what the working tree's uncommitted changes do to the map and flows, updated a few seconds after you stop saving.
-- **Ask** — questions answered by a read-only agent, with citations.
+- **Home:** one sentence on what the app is, the top parts diagram, the main journeys, where to start reading.
+- **Architecture** and **Flows** tabs over the same tree, with breadcrumbs and a side panel (text, code links, Ask).
+- Later: **Preview** (changes first) and **Timelapse**.
 
-## Hackathon scope (must ship)
+## Scope now
 
-1. Structure: component map for one TypeScript repo, computed from imports.
-2. Behavior: entry points + call trees → Claude-grouped flows with drill-down.
-3. History: ~15 sampled checkpoints, incremental updates, timelapse.
-4. Preview of uncommitted changes.
-5. Ask, read-only, with citations.
-6. Evals with numbers on screen.
+- TypeScript/JavaScript repos, small to medium (demo: `vercel/ai-chatbot`, D30; generality check: a small TS CLI tool or library, D39; Umami as a large regression test).
+- Architecture shows code parts and outside systems only.
 
-## Out of scope for the hackathon (later)
+## Later
 
-- Languages beyond TypeScript (design for them now, build later)
-- Team / branch / CODEOWNERS scoping (branch-vs-main preview is the first step)
-- GitHub PR comments via GitHub Actions
-- Runtime tracing from tests to fill gaps in static flows
-- Multi-user live views, voice (Cartesia), Elastic search for Ask
+- More languages; DB tables, config/env and screens as their own layers; team/branch scoping; PR comments; runtime tracing to fill static gaps; editor extension.
 
 ## Success criteria
 
-- On the demo repo, the map shows 10–25 sensible components and the main flows read correctly to someone who knows the repo.
-- The timelapse plays smoothly: unchanged parts never move or get renamed between frames.
-- Every Claude claim (step, caption, answer) points to real functions/files/commits.
-- Eval numbers: see "Evaluation" in ARCHITECTURE.md.
+- **Newcomer:** on the demo repo, the home screen is readable in under a minute and matches the hand-written target (`docs/targets/ai-chatbot.md`) in substance.
+- **Expert:** any function is at most 3 clicks from home; the expert setting shows no prose they didn't ask for.
+- **Grounded:** every claim (box, step, answer, caption) points to real functions/files/commits (validator: 100%).
+- **Stable:** a re-run on the same commit changes nothing; across commits, unchanged boxes keep ID, text and position.
+- **General:** the same pipeline gives a sensible tree on a non-web TS repo without repo-specific rules.
 
-## Demo (target)
+## Hackathon notes (Cal Hacks 13.0)
 
-1. Timelapse of a well-known open-source TypeScript repo's history (30 s).
-2. Open a flow, expand a step, ask "why does this exist?" (40 s).
-3. Make a change live; Preview shows the architectural impact before committing (40 s).
-4. Eval numbers on screen (20 s).
-
-## Sponsor tracks
+No deadline now (D35); kept for reference.
 
 | Track | Fit |
 | --- | --- |
 | Factory (Droid SDK) | All AI work runs through Droid with scoped permissions and visible output |
 | Anthropic | Named community + Claude central, with guardrails against invented claims |
 | Microsoft | Production-minded, measurable, end to end |
-| SpacetimeDB | Only if chosen as the store (open decision O1) |

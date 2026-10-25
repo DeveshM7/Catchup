@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.env
+.env.*
+!.env.example
+.catchup/
+.DS_Store
+fixtures/*
+!fixtures/tiny/
+!fixtures/tiny-ai/
+!fixtures/tiny-cli/
+!fixtures/tiny-web/

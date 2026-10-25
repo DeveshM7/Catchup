@@ -1,0 +1,17 @@
+{
+  "name": "@catchup/analyzer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Extract + structure + behavior (deterministic).",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "dependency-cruiser": "^18.7.0",
+    "typescript": "~6.0.3"
+  }
+}

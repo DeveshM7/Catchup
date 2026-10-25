@@ -1,0 +1,13 @@
+{
+  "name": "tiny-web",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ai-sdk/react": "*",
+    "ai": "*",
+    "next": "*",
+    "postgres": "*",
+    "react": "*",
+    "swr": "*"
+  }
+}

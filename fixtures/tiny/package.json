@@ -1,0 +1,10 @@
+{
+  "name": "tiny",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "*",
+    "pg": "*",
+    "stripe": "*"
+  }
+}

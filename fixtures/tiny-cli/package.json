@@ -1,0 +1,16 @@
+{
+  "name": "tiny-cli",
+  "type": "module",
+  "bin": {
+    "tc": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "cac": "*",
+    "chokidar": "*"
+  }
+}

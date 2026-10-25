@@ -1,0 +1,9 @@
+{
+  "name": "tiny-ai",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ai": "*",
+    "pg": "*"
+  }
+}

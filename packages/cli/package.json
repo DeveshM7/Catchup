@@ -1,0 +1,20 @@
+{
+  "name": "@catchup/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "catchup init | backfill | watch | open.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@catchup/agent": "workspace:*",
+    "@catchup/analyzer": "workspace:*",
+    "@catchup/history": "workspace:*",
+    "@catchup/store": "workspace:*",
+    "@catchup/web": "workspace:*"
+  }
+}
