@@ -111,7 +111,7 @@ Three parts, each finished before the next. Every build ends with its "done when
 
 ### Build 4 — Generality check
 
-- [ ] Hand-written target for the second repo (`docs/targets/<repo>.md`)
+- [x] Hand-written target for the second repo (`docs/targets/tsup.md`)
 - [ ] Run Builds 1–3 on it; fix what breaks with general rules only
 - [ ] Umami still works (regression)
 
@@ -200,3 +200,4 @@ _One line per session: date, what got done, what's next, anything surprising._
 - 2026-10-25 — Flows layout fix (D49): main path packed into columns, branch/error steps hang off the step before them, chips don't break. ai-chatbot send journey: 3 columns instead of 7. 158 tests, typecheck, lint pass.
 - 2026-10-25 — Expert names fix (D50): sibling parts carved from one folder all showed the same folder name (`components/chat/`, `components/, hooks/`); now a part keeps its folder name only if it owns it among its siblings, else its busiest file + count. ai-chatbot: every canvas has distinct names. 159 tests, typecheck, lint pass.
 - 2026-10-25 — Provider switch (D51): `CATCHUP_PROVIDER=anthropic` reaches Claude through the Anthropic API instead of Droid (`agent/src/anthropic.ts`: structured runner + read-only agent session with our own Read/LS/Glob/Grep, same permission handler, caps and run log). Tested with a fake API (8 tests); not yet run against the live API. 167 tests, typecheck, lint pass.
+- 2026-10-25 — Build 4 started: hand-written target `docs/targets/tsup.md` (CLI → config → esbuild per format → output plugins → dist/, dts in a worker; 5 verified surprises). Analyzer today finds all 5 entry points but: the bin journey stops at depth 8, no outside tools (esbuild, Rollup, tsc), the output plugins' `renderChunk` methods and the dts worker are invisible, every flow is partial. Gaps listed in the target. Next: general fixes, then `catchup understand` on tsup.
