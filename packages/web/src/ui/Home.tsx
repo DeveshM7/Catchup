@@ -1,5 +1,5 @@
 import type { TreeData } from "../shared/types";
-import { codeName, compactStep, visibleChildren, type Familiarity, type Selection } from "../shared/view";
+import { codeName, compactStep, visibleChildren, type Familiarity, type Scope, type Selection } from "../shared/view";
 import { ArchCanvas } from "./ArchCanvas";
 import { entryName, MethodLabel } from "./labels";
 import { cssVars, pad2 } from "./theme";
@@ -9,7 +9,7 @@ const MAX_START = 2;
 type Props = {
   data: TreeData;
   mode: Familiarity;
-  scope: { files: Set<string>; systems: Set<string> };
+  scope: Scope;
   selected: string | null;
   onSelect: (sel: Selection | null) => void;
   onOpen: (id: string) => void;

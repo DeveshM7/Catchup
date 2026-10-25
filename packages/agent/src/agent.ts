@@ -130,6 +130,8 @@ export type AgentRunnerOptions = {
   maxMs?: number;
   open?: OpenSession;
   log: (entry: PassLog) => void;
+  /** Each tool call as it happens (allowed or denied), e.g. to show the agent's steps live. */
+  onTool?: (call: ToolCallLog) => void;
 };
 
 const ANSWER_NOW =
@@ -186,7 +188,9 @@ export function agentRunner(options: AgentRunnerOptions): Runner {
             }
             const use = { name: event.name, input: event.input };
             const problem = toolProblem(use, cwd, roots);
-            log.toolCalls.push({ name: event.name, target: targetOf(use, cwd), ...(problem ? { denied: problem } : {}) });
+            const call: ToolCallLog = { name: event.name, target: targetOf(use, cwd), ...(problem ? { denied: problem } : {}) };
+            log.toolCalls.push(call);
+            options.onTool?.(call);
             if (problem) {
               turn.blocked = problem;
               void current.interrupt().catch(() => undefined);

@@ -121,10 +121,10 @@ Three parts, each finished before the next. Every build ends with its "done when
 
 ### Build 5 — Ask
 
-- [ ] Read-only Ask session (shared permission handler), brief from the selected node
-- [ ] Answers cite nodes/functions/files; citation check; one retry
-- [ ] General chat + "Ask" on any box; cited nodes highlighted, cited journeys animated
-- [ ] Show the agent's steps (tool calls) in the UI
+- [x] Read-only Ask session (shared permission handler), brief from the selected node
+- [x] Answers cite nodes/functions/files; citation check; one retry
+- [x] General chat + "Ask" on any box; cited nodes highlighted, cited journeys animated (built; highlighting not yet seen live, credits ran out)
+- [x] Show the agent's steps (tool calls) in the UI
 
 **Done when:** five questions per demo repo get correct, cited answers with the right boxes highlighted.
 
@@ -205,3 +205,4 @@ _One line per session: date, what got done, what's next, anything surprising._
 - 2026-10-25 — First live Understand run through the Anthropic API (D51) on tsup: 10 Claude calls (1 retry), 0 tool calls, 53 s, ~69k tokens; second run 0 calls, byte-identical. Scored against `docs/targets/tsup.md`: summary ✓; parts by role ✓ (CLI, build engine, esbuild integration, plugins, declarations, helpers, tooling) but the declarations part holds only `ts-resolve.ts` while `rollup.ts`/`tsc.ts`/`api-extractor.ts` sit in "Build engine"; main journey ✓ (command → settings check → esbuild → output plugins → dts branch → watch branch; the plugins step is covered from the factories, so the renderChunk limit didn't hurt); second journey `build()` repeats the first (same flow family); glossary partial (no config file, externals, dts vs experimentalDts); surprises 0 of 5 (agent read no code). Next: journeys from different families, deterministic surprise hints (unused exports), push the extras pass to read code.
 - 2026-10-25 — D54 (journeys from different families with ≥ 3 functions, lenient step order, possibly-unused exports in `hot.md`, extras told to read code). tsup live run: 9 calls, no retries, 35 s. Against the target: summary ✓, 6 parts by role ✓ (declarations part now holds `rollup.ts`/`tsc.ts`/`api-extractor.ts`/`ts-resolve.ts`), one main journey ✓ (command → options check → esbuild → output plugins → dts branch → watch branch), defineConfig as an other flow ✓, start-here ✓ (`index.ts`, `esbuild/index.ts`, `cli-main.ts`, `plugin.ts`), changes ✓; glossary partial (no config file / externals); surprises 2 of 5 (deprecation; 3 of 4 dead exports, hedged), with 1 tool call in the whole run; `run.ts` described as "Run after build" though nothing calls it. Next: make the extras pass actually read code, check the dashboard on tsup and Umami.
 - 2026-10-25 — Build 4 closed by user choice (D55) with known gaps: surprises 2 of 5 on tsup (the extras agent barely reads code), glossary misses config files and externals, dashboard on tsup and Umami not checked by eye. Next: Build 5 (Ask).
+- 2026-10-25 — Build 5 built (D56): `agent/src/ask.ts` (map + selected box + last 3 turns → read-only agent → `{answer, cites}`; cites must be box ids, function ids or files, decoration stripped; one retry), live tool steps via `agentRunner`'s `onTool`, `POST /api/ask` streaming NDJSON, `catchup ask <path> "<q>" [--node id]`, Ask panel (chat, "Ask about this" on any box, cite chips, answer lights its files/systems/boxes, cited journey steps pulse in order). Live: two CLI/curl answers on ai-chatbot correct and grounded (rate limits: 7 tool calls, 22 s, got "limits identical" right; createDocument hand-off: 3 tool calls). Headless Chrome caught a crash (an effect returning `scrollIntoView`'s Promise) and Claude copying `[id]` brackets into cites; both fixed. Then the Anthropic credit ran out mid-check, so the "five questions with the right boxes lit" check is not done. 179 tests, typecheck, lint pass.

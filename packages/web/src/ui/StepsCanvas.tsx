@@ -1,12 +1,11 @@
 import { FLOW, flowLayout } from "../shared/flowLayout";
 import type { NodeView, TreeData } from "../shared/types";
-import { canOpen, codeName, compactStep, inScope, visibleChildren, type Familiarity } from "../shared/view";
+import { canOpen, codeName, compactStep, inScope, visibleChildren, type Familiarity, type Scope } from "../shared/view";
 import { Canvas } from "./Canvas";
 import { Markers, markerId, roundedPath } from "./edges";
 import { Legend, NodeIcon } from "./GraphView";
 import { cssVars, pad2 } from "./theme";
 
-type Scope = { files: Set<string>; systems: Set<string> };
 
 type Props = {
   /** A journey or a step with sub-steps. */
@@ -81,6 +80,7 @@ export function StepsCanvas({ parent, data, mode, scope, selected, onSelect, onO
             const compact = compactStep(step, mode);
             const opens = canOpen(step);
             const on = lit && !onCanvas && inScope(scope, step.id, step.files);
+            const cited = scope.nodes?.has(step.id) === true;
             const dim = lit && !onCanvas && !on;
             return (
               <div
@@ -88,8 +88,8 @@ export function StepsCanvas({ parent, data, mode, scope, selected, onSelect, onO
                 role="button"
                 tabIndex={0}
                 data-id={step.id}
-                className={`step-box ${kind} ${compact ? "compact" : ""} ${step.systems.length ? "has-chips" : ""} ${selected === step.id ? "selected" : ""} ${dim ? "dim" : ""} ${on ? "lit" : ""}`}
-                style={{ left: box.x, top: box.y, width: box.width, height: box.height, ...cssVars(step.color) }}
+                className={`step-box ${kind} ${compact ? "compact" : ""} ${step.systems.length ? "has-chips" : ""} ${selected === step.id ? "selected" : ""} ${dim ? "dim" : ""} ${on ? "lit" : ""} ${cited ? "cited" : ""}`}
+                style={{ left: box.x, top: box.y, width: box.width, height: box.height, ...cssVars(step.color), ["--i" as string]: box.index }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelect(selected === step.id ? null : step.id);

@@ -1,11 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { MapGraph, MapNode, TreeData } from "../shared/types";
-import { codeName, inScope, type Familiarity } from "../shared/view";
+import { codeName, inScope, type Familiarity, type Scope } from "../shared/view";
 import { api } from "./api";
 import { Canvas } from "./Canvas";
 import { GraphView, Legend, NodeIcon } from "./GraphView";
 
-type Scope = { files: Set<string>; systems: Set<string> };
 
 type Props = {
   /** `root` (top parts) or a part id. */

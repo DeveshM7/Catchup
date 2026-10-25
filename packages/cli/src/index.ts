@@ -7,6 +7,7 @@ import { fileChurn } from "@catchup/history";
 import {
   agentRunner,
   anthropicRunner,
+  askQuestion,
   anthropicSession,
   buildDigest,
   DEFAULT_MAX_TOOL_CALLS,
@@ -18,7 +19,9 @@ import {
   selectTopFlows,
   understand,
   type Explained,
+  type Answer,
   type PassLog,
+  type ToolCallLog,
   type Provider,
   type Runner,
   type Understanding,
@@ -54,7 +57,8 @@ export function usage(): string {
     '  explain <path> ["<label>" …] [--top N]   Claude explains flows (default: top 15) and components',
     "  understand <path> [--max-calls N]        read-only Claude agents build the understanding tree",
     '  understand <path> --open "<node id>"     write the children of an unopened node',
-    "  open <path> [--port N]         show the understanding tree in your browser (opening a box may call Claude)",
+    "  open <path> [--port N]         show the understanding tree in your browser (opening a box or asking calls Claude)",
+    '  ask <path> "<question>" [--node "<node id>"]   ask a read-only agent about the code; answers cite real code',
     "",
     "Claude is reached through Droid (FACTORY_API_KEY) by default; CATCHUP_PROVIDER=anthropic uses the Anthropic API (ANTHROPIC_API_KEY).",
   ].join("\n");
@@ -271,12 +275,12 @@ function workspace(target: string): Workspace {
 type Session = {
   inputs: (previous: Understanding | undefined) => UnderstandInputs;
   toolCalls: () => number;
-  /** Writes the run log; returns its path. */
-  finish: (command: string, stats: UnderstandStats | undefined) => string;
+  /** Writes the run log; returns its path. `stats` absent = the run failed. */
+  finish: (command: string, stats: object | undefined) => string;
 };
 
 /** Everything one Understand or Open run needs, and its run log (D38). */
-function understandSession(ws: Workspace, provider: Provider, maxCalls: number, startedAt: Date, quiet = false): Session {
+function understandSession(ws: Workspace, provider: Provider, maxCalls: number, startedAt: Date, quiet = false, onTool?: (call: ToolCallLog) => void): Session {
   const { repoRoot, sha, facts, snapshot, trees, signals } = ws;
   const readFile = (path: string): string | undefined => {
     try {
@@ -314,6 +318,7 @@ function understandSession(ws: Workspace, provider: Provider, maxCalls: number, 
           model,
           maxToolCalls: maxCalls,
           ...(provider === "anthropic" ? { open: anthropicSession() } : {}),
+          ...(onTool ? { onTool } : {}),
           log: (entry) => passes.push(entry),
         }),
       onCall: (job, attempt) => say(`  claude (${model} via ${provider}): ${job}${attempt > 1 ? " (retry)" : ""}`),
@@ -390,10 +395,51 @@ function openFromDashboard(ws: Workspace, maxCalls: number): (understanding: Und
   };
 }
 
+type AskOptions = { node?: string; history?: { question: string; answer: string }[] };
+
+/** One Ask run (Build 5): a read-only agent answers with checked cites; logged like any pass (D38). */
+async function runAsk(ws: Workspace, understanding: Understanding, question: string, options: AskOptions, maxCalls: number, onTool?: (call: ToolCallLog) => void): Promise<Answer> {
+  const provider = loadEnv();
+  const startedAt = new Date();
+  const session = understandSession(ws, provider, maxCalls, startedAt, true, onTool);
+  const inputs = session.inputs(understanding);
+  let answer: Answer | undefined;
+  try {
+    answer = await askQuestion({
+      facts: ws.facts,
+      understanding,
+      question,
+      ...options,
+      digestDir: inputs.digestDir,
+      digestNames: Object.keys(inputs.digest).sort(),
+      maxToolCalls: maxCalls,
+      runner: inputs.runnerFor("ask"),
+    });
+    return answer;
+  } finally {
+    session.finish(`ask ${JSON.stringify(question)}`, answer ? { question, ...options, answer } : undefined);
+  }
+}
+
+async function askCommand(target: string, question: string, node: string | undefined, maxCalls: number): Promise<void> {
+  const ws = workspace(target);
+  const understanding = loadUnderstanding<Understanding>(ws.repoRoot, ws.sha);
+  if (!understanding) throw new Error(`no understanding for ${ws.sha.slice(0, 9)} yet; run: catchup understand ${target}`);
+  const answer = await runAsk(ws, understanding, question, node ? { node } : {}, maxCalls, (call) =>
+    console.error(`  ${call.denied ? "denied" : "tool"}: ${call.name} ${call.target}`),
+  );
+  console.log(answer.answer);
+  console.log(["", "Cites:", ...[...answer.nodes, ...answer.functions, ...answer.files].map((c) => `  - ${c}`)].join("\n"));
+}
+
 async function open(target: string, port: number, maxCalls: number): Promise<void> {
   const ws = workspace(target);
   const understanding = loadUnderstanding<Understanding>(ws.repoRoot, ws.sha);
-  const { url } = await startDashboard({ ...ws, ...(understanding ? { understanding } : {}), open: openFromDashboard(ws, maxCalls) }, port);
+  const ask = (u: Understanding, request: { question: string } & AskOptions, onStep: (call: ToolCallLog) => void): Promise<Answer> => {
+    const { question, ...options } = request;
+    return runAsk(ws, u, question, options, maxCalls, onStep);
+  };
+  const { url } = await startDashboard({ ...ws, ...(understanding ? { understanding } : {}), open: openFromDashboard(ws, maxCalls), ask }, port);
   console.log(`Catchup dashboard: ${url}`);
   if (!understanding) console.log(`(no understanding yet; run: catchup understand ${target})`);
   console.log("Press Ctrl+C to stop.");
@@ -409,7 +455,8 @@ export async function main(argvIn: string[]): Promise<number> {
   const { value: portValue, rest: afterPort } = option(argvIn, "--port");
   const { value: topValue, rest: afterTop } = option(afterPort, "--top");
   const { value: openValue, rest: afterOpen } = option(afterTop, "--open");
-  const { value: maxCallsValue, rest: argv } = option(afterOpen, "--max-calls");
+  const { value: maxCallsValue, rest: afterMax } = option(afterOpen, "--max-calls");
+  const { value: nodeValue, rest: argv } = option(afterMax, "--node");
   const showNoise = argv.includes("--all");
   const [command, target = ".", label, ...more] = argv.filter((arg) => arg !== "--all");
   if (command === "explain") {
@@ -430,6 +477,13 @@ export async function main(argvIn: string[]): Promise<number> {
     const maxCalls = maxCallsValue === undefined ? DEFAULT_MAX_TOOL_CALLS : Number(maxCallsValue);
     if (!Number.isInteger(maxCalls) || maxCalls < 0) throw new Error("--max-calls needs a number ≥ 0");
     await open(target, port, maxCalls);
+    return 0;
+  }
+  if (command === "ask") {
+    if (label === undefined) throw new Error('usage: catchup ask <path> "<question>" [--node "<node id>"]');
+    const maxCalls = maxCallsValue === undefined ? DEFAULT_MAX_TOOL_CALLS : Number(maxCallsValue);
+    if (!Number.isInteger(maxCalls) || maxCalls < 0) throw new Error("--max-calls needs a number ≥ 0");
+    await askCommand(target, [label, ...more].join(" "), nodeValue, maxCalls);
     return 0;
   }
   if (command === "init") {

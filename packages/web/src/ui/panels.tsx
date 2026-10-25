@@ -12,6 +12,8 @@ type Props = {
   /** Go deeper from inside the panel (Back returns here). */
   onSelect: (sel: Selection) => void;
   onOpen: (id: string) => void;
+  /** Opens the Ask chat about a box (Build 5). */
+  onAsk?: (id: string) => void;
 };
 
 const KIND = { part: "Part of the code", system: "Outside system", journey: "Journey", step: "Step" } as const;
@@ -34,7 +36,7 @@ function stepLabel(node: NodeView, data: TreeData): string {
   return `Step ${index}${kind}`;
 }
 
-function NodePanel({ node, data, mode, onSelect, onOpen }: Props & { node: NodeView }) {
+function NodePanel({ node, data, mode, onSelect, onOpen, onAsk }: Props & { node: NodeView }) {
   const text = panelText(node, mode);
   const title = mode === "expert" ? codeName(node, data) : node.title;
   const entry = journeyOf(node.id, data)?.entry;
@@ -52,6 +54,9 @@ function NodePanel({ node, data, mode, onSelect, onOpen }: Props & { node: NodeV
         <button className="primary" onClick={() => onOpen(node.id)}>
           {node.children === "unopened" ? "Open ▸ (Claude writes this level, about a minute)" : node.kind === "journey" ? "See every step ▸" : node.kind === "part" && node.children === "leaf" ? "Open: show its files ▸" : "Open ▸"}
         </button>
+      )}
+      {onAsk && (
+        <button className="ghost small ask-this" onClick={() => onAsk(node.id)}>Ask about this</button>
       )}
       {node.systems.length > 0 && (
         <>

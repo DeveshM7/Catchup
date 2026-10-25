@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MapData, TreeData } from "../shared/types";
-import { FAMILIARITIES, canOpen, codeName, panelText, pathTo, selectionScope, type Familiarity, type Selection } from "../shared/view";
+import { answerScope, FAMILIARITIES, canOpen, codeName, panelText, pathTo, selectionScope, type Familiarity, type Selection } from "../shared/view";
 import { api } from "./api";
 import { ArchCanvas } from "./ArchCanvas";
+import { AskPanel, type Turn } from "./AskPanel";
 import { Canvas } from "./Canvas";
 import { GraphView, Legend } from "./GraphView";
 import { Home } from "./Home";
@@ -56,6 +57,10 @@ export function App() {
   const [opening, setOpening] = useState<Opening | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const [showOther, setShowOther] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [about, setAbout] = useState<string | null>(null);
+  const [litTurn, setLitTurn] = useState<Turn | null>(null);
 
   useEffect(() => {
     api.understanding().then(setData, (e: unknown) => setError(String(e)));
@@ -70,7 +75,12 @@ export function App() {
   if (!data) return <div className="center">Loading…</div>;
 
   const sel = stack.at(-1);
-  const scope = selectionScope(sel, data);
+  // A selected box wins; otherwise the answer last lit shows what it cites (Build 5).
+  const scope = sel || !litTurn?.reply ? selectionScope(sel, data) : answerScope(litTurn.reply, data);
+  const askAbout = (id: string | null): void => {
+    setAbout(id);
+    setAsking(true);
+  };
   /** From a canvas or list: starts a fresh panel. */
   const select = (next: Selection | null): void => setStack(next ? [next] : []);
   /** From inside the panel: Back returns to where it was. */
@@ -113,7 +123,7 @@ export function App() {
   );
 
   return (
-    <div className="app">
+    <div className={`app ${asking ? "asking" : ""}`}>
       <aside className="sidebar">
         <button className="brand" onClick={() => go({ view: "home" })}>
           <span className="logo">◆</span> Catchup
@@ -175,6 +185,7 @@ export function App() {
             ))}
           </div>
           <Search data={data} onPick={select} />
+          <button className={`ghost ask-toggle ${asking ? "active" : ""}`} onClick={() => setAsking(!asking)}>Ask</button>
         </div>
 
         {opening && <OpeningNote opening={opening} />}
@@ -231,8 +242,29 @@ export function App() {
             {stack.length > 1 ? <button className="link-text" onClick={() => setStack((s) => s.slice(0, -1))}>← Back</button> : <span />}
             <button className="close" onClick={() => select(null)} title="Close">×</button>
           </div>
-          <Panel sel={sel} data={data} mode={mode} onSelect={push} onOpen={open} />
+          <Panel sel={sel} data={data} mode={mode} onSelect={push} onOpen={open} onAsk={askAbout} />
         </aside>
+      )}
+
+      {asking && (
+        <AskPanel
+          data={data}
+          mode={mode}
+          turns={turns}
+          setTurns={setTurns}
+          about={about}
+          onAbout={setAbout}
+          lit={litTurn?.id ?? null}
+          onLight={(turn) => {
+            setLitTurn(turn);
+            setStack([]);
+          }}
+          onSelect={select}
+          onClose={() => {
+            setAsking(false);
+            setLitTurn(null);
+          }}
+        />
       )}
     </div>
   );

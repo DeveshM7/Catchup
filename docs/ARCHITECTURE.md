@@ -202,8 +202,10 @@ Checked before anything is stored; one retry with the problems listed; then fail
 - JSON API, `127.0.0.1` only: `GET /api/understanding` (the tree as `TreeData`), `/api/canvas?id=` (`root` or a part id → laid-out graph), `/api/calls?entry=&fn=` (call tree or a function's subtree), `/api/source?fn=`, `/api/map`; `POST /api/open?id=` runs the Open pass and returns the new tree. Nothing else writes.
 ## Ask (Part 2, Build 5)
 
-- Read-only Droid session (same permission handler as Understand). Starting brief: the question, the selected node (its anchor, parents, children, text), its digest.
-- The answer cites node IDs and function/file IDs; citations are checked before showing; the UI highlights cited nodes and animates a cited journey's path.
+- Read-only agent session (same runner, permission handler and caps as Understand, either provider). Starting brief: the tree as a map (summary, parts two levels deep, journeys and their steps with ids, systems, other flows), the selected box (text, parents, children, files, functions) and the last 3 turns of the chat; digests are listed for Read (`agent/src/ask.ts`, D56).
+- Returns `{answer, cites}`: ≤ 150 words (limit 220), 1–8 cites, each a box id, function id or file path (`[ ]`, backticks and `()` copied from the map are stripped). Invalid → one retry → error shown. Answers aren't stored; each run is logged in `runs/`.
+- `POST /api/ask` streams newline-delimited JSON: one `step` per tool call as it happens, then `answer` (or `error`). `catchup ask <path> "<question>" [--node <id>]` does the same in the terminal.
+- UI: an Ask panel beside the canvas (general, or "Ask about this" from any box's panel). The last answer clicked lights what it cites through the usual scope (its files, the files of cited functions and boxes, cited systems, cited boxes); a cited journey's steps pulse one after another. Selecting a box takes over the highlight; closing the panel returns to the answer.
 
 ## Changes (Part 3, Builds 6–9)
 

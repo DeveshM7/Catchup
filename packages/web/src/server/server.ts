@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import type { Understanding } from "@catchup/agent";
 import { createServer, type Plugin, type ViteDevServer } from "vite";
-import type { MapGraph, SourceView, TreeData } from "../shared/types.js";
+import type { AskEvent, AskRequest, AskStep, MapGraph, SourceView, TreeData } from "../shared/types.js";
 import { buildMap, callsOf, treeView, type DashboardInputs } from "./data.js";
 import { canvasGraph, treeData } from "./understanding.js";
 
@@ -55,6 +55,10 @@ export class TreeState {
     this.current = inputs.understanding;
   }
 
+  understanding(): Understanding | undefined {
+    return this.current;
+  }
+
   data(): TreeData | undefined {
     return this.current && treeData({ ...this.inputs, understanding: this.current });
   }
@@ -88,9 +92,63 @@ export class TreeState {
   }
 }
 
+const MAX_QUESTION = 2000;
+const MAX_BODY = 64_000;
+
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk: Buffer) => {
+      body += chunk.toString("utf8");
+      if (body.length > MAX_BODY) reject(new Error("request too large"));
+    });
+    req.on("end", () => resolve(body));
+    req.on("error", reject);
+  });
+}
+
+/** The request as sent, checked: a non-empty question, an optional node id, a short history. */
+export function parseAsk(body: string): AskRequest {
+  const raw = JSON.parse(body) as Record<string, unknown>;
+  const question = typeof raw.question === "string" ? raw.question.trim() : "";
+  if (!question || question.length > MAX_QUESTION) throw new Error(`question must be 1–${MAX_QUESTION} characters`);
+  const history = Array.isArray(raw.history)
+    ? raw.history.flatMap((t: unknown) => {
+        const turn = t as Record<string, unknown>;
+        return typeof turn?.question === "string" && typeof turn.answer === "string" ? [{ question: turn.question, answer: turn.answer }] : [];
+      })
+    : [];
+  return { question, ...(typeof raw.node === "string" && raw.node ? { node: raw.node } : {}), ...(history.length ? { history } : {}) };
+}
+
+/** Streams an Ask run as newline-delimited JSON events: each tool call, then the answer (or an error). */
+async function streamAsk(inputs: DashboardInputs, state: TreeState, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const write = (event: AskEvent): void => {
+    res.write(`${JSON.stringify(event)}\n`);
+  };
+  res.statusCode = 200;
+  res.setHeader("content-type", "application/x-ndjson");
+  try {
+    const request = parseAsk(await readBody(req));
+    const u = state.understanding();
+    if (!u) throw new Error("no understanding yet; run: catchup understand <path>");
+    if (!inputs.ask) throw new Error("asking is not available here");
+    if (request.node !== undefined && !u.nodes[request.node]) throw new Error(`no node "${request.node}"`);
+    const steps: AskStep[] = [];
+    const reply = await inputs.ask(u, request, (step) => {
+      steps.push(step);
+      write({ type: "step", step });
+    });
+    write({ type: "answer", reply: { ...reply, steps } });
+  } catch (e) {
+    write({ type: "error", error: errorText(e) });
+  }
+  res.end();
+}
+
 /**
  * JSON API over stored analysis (127.0.0.1 only): GET /api/understanding, /api/canvas?id=, /api/calls?entry=&fn=,
- * /api/source?fn=, /api/map; POST /api/open?id= runs the Open pass. Nothing else writes.
+ * /api/source?fn=, /api/map; POST /api/open?id= runs the Open pass, POST /api/ask streams an answer (Build 5). Only Open writes.
  */
 function apiPlugin(inputs: DashboardInputs): Plugin {
   const map = buildMap(inputs);
@@ -103,6 +161,11 @@ function apiPlugin(inputs: DashboardInputs): Plugin {
         const url = new URL(req.url ?? "/", "http://localhost");
         if (!url.pathname.startsWith("/api/")) return next();
         const param = (name: string): string => url.searchParams.get(name) ?? "";
+        if (url.pathname === "/api/ask") {
+          if (req.method !== "POST") return send(res, 405, { error: "use POST" });
+          void streamAsk(inputs, state, req, res);
+          return;
+        }
         if (url.pathname === "/api/open") {
           if (req.method !== "POST") return send(res, 405, { error: "use POST" });
           state.open(param("id")).then(

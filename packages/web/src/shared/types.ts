@@ -100,3 +100,15 @@ export type TreeNodeView =
 export type TreeView = { entry: string; label: string; partial: boolean; systems: string[]; root: TreeNodeView };
 
 export type SourceView = { id: string; file: string; startLine: number; endLine: number; text: string };
+
+/** Ask (Build 5): a question about the code, optionally about one box, with the chat so far. */
+export type AskRequest = { question: string; node?: string; history?: { question: string; answer: string }[] };
+
+/** One tool call the agent made while answering (shown live). */
+export type AskStep = { name: string; target: string; denied?: string };
+
+/** A checked answer: every cite resolved to a box, a function or a file. */
+export type AskReply = { answer: string; nodes: string[]; functions: string[]; files: string[]; steps: AskStep[] };
+
+/** `POST /api/ask` streams these, one JSON object per line. */
+export type AskEvent = { type: "step"; step: AskStep } | { type: "answer"; reply: AskReply } | { type: "error"; error: string };

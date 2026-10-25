@@ -1,4 +1,4 @@
-import type { NodeView, TreeData } from "./types.js";
+import type { AskReply, NodeView, TreeData } from "./types.js";
 
 /** How well the reader knows the code (D40): picks text, starting level, and whether error paths and code names show. */
 export type Familiarity = "new" | "familiar" | "expert";
@@ -133,8 +133,25 @@ export function rankFiles(files: string[], data: TreeData): string[] {
   return [...files].sort((a, b) => (data.files[b]?.flows ?? 0) - (data.files[a]?.flows ?? 0) || (a < b ? -1 : 1));
 }
 
+/** What lights up: boxes holding these files or systems, and (for answers) the cited boxes themselves. */
+export type Scope = { files: Set<string>; systems: Set<string>; nodes?: Set<string> };
+
+/**
+ * What an answer points at (Build 5): cited files, the files of cited functions and boxes, cited systems, and the cited
+ * boxes plus the steps of a cited journey (so its path can be played).
+ */
+export function answerScope(reply: AskReply, data: TreeData): Scope {
+  const nodes = reply.nodes.flatMap((id) => data.nodes[id] ?? []);
+  const steps = nodes.flatMap((n) => (n.kind === "journey" && Array.isArray(n.children) ? n.children : []));
+  return {
+    files: new Set([...reply.files, ...reply.functions.map(fileOf), ...nodes.flatMap((n) => n.files)]),
+    systems: new Set(nodes.filter((n) => n.kind === "system").map((n) => n.id)),
+    nodes: new Set([...reply.nodes, ...steps]),
+  };
+}
+
 /** The files and systems a selection stands for: boxes holding them light up in both views. */
-export function selectionScope(sel: Selection | undefined, data: TreeData): { files: Set<string>; systems: Set<string> } {
+export function selectionScope(sel: Selection | undefined, data: TreeData): Scope {
   if (!sel) return { files: new Set(), systems: new Set() };
   if (sel.kind === "file") return { files: new Set([sel.path]), systems: new Set() };
   if (sel.kind === "fn") return { files: new Set([fileOf(sel.id)]), systems: new Set() };
@@ -145,6 +162,6 @@ export function selectionScope(sel: Selection | undefined, data: TreeData): { fi
 }
 
 /** Whether a box (by its files or system id) is part of the selection. */
-export function inScope(scope: { files: Set<string>; systems: Set<string> }, id: string, files: string[]): boolean {
-  return scope.systems.has(id) || files.some((f) => scope.files.has(f));
+export function inScope(scope: Scope, id: string, files: string[]): boolean {
+  return scope.systems.has(id) || scope.nodes?.has(id) === true || files.some((f) => scope.files.has(f));
 }

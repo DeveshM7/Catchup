@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NodeView, TreeData } from "./shared/types.js";
-import { boxText, codeName, compactStep, folderName, panelText, visibleChildren } from "./shared/view.js";
+import { answerScope, boxText, codeName, compactStep, folderName, inScope, panelText, visibleChildren } from "./shared/view.js";
+import { parseAsk } from "./server/server.js";
 
 const node = (id: string, extra: Partial<NodeView> = {}): NodeView => ({
   id, kind: "step", title: `T ${id}`, short: `S ${id}`, long: `L ${id}`, depth: 2, children: "leaf", parent: null,
@@ -49,3 +50,29 @@ describe("familiarity (D40)", () => {
     expect(codeName(parent, d)).toBe("c/, lib/");
   });
 });
+
+describe("Ask (Build 5)", () => {
+  it("lights cited files, the files of cited functions and boxes, cited systems, and a cited journey's steps", () => {
+    const steps = [node("s1", { files: ["lib/db.ts"] }), node("s2", { files: ["app/route.ts"] })];
+    const journey = node("j", { kind: "journey", children: ["s1", "s2"], files: ["app/route.ts", "lib/db.ts"] });
+    const pg = node("system:Postgres", { kind: "system", files: ["lib/db.ts"] });
+    const d = data([journey, pg, ...steps]);
+    const scope = answerScope({ answer: "a", nodes: ["j", "system:Postgres"], functions: ["lib/ai.ts#run"], files: ["README.md"], steps: [] }, d);
+    expect([...scope.files].sort()).toEqual(["README.md", "app/route.ts", "lib/ai.ts", "lib/db.ts"]);
+    expect([...scope.systems]).toEqual(["system:Postgres"]);
+    expect([...scope.nodes!].sort()).toEqual(["j", "s1", "s2", "system:Postgres"]);
+    expect(inScope(scope, "s2", [])).toBe(true);
+  });
+
+  it("accepts a question with an optional box and history, and rejects empty ones", () => {
+    expect(parseAsk(JSON.stringify({ question: "  Why?  ", node: "part:lib", history: [{ question: "q", answer: "a" }, { bad: 1 }] }))).toEqual({
+      question: "Why?",
+      node: "part:lib",
+      history: [{ question: "q", answer: "a" }],
+    });
+    expect(parseAsk(JSON.stringify({ question: "Why?", node: "" }))).toEqual({ question: "Why?" });
+    expect(() => parseAsk(JSON.stringify({ question: "   " }))).toThrow(/question must be/);
+    expect(() => parseAsk("not json")).toThrow();
+  });
+});
+

@@ -1,4 +1,4 @@
-import type { MapData, MapGraph, SourceView, TreeData, TreeView } from "../shared/types";
+import type { AskEvent, AskRequest, MapData, MapGraph, SourceView, TreeData, TreeView } from "../shared/types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
@@ -36,4 +36,19 @@ export const api = {
     cached(calls, `fn:${fn}:${entry ?? ""}`, () => request(`/api/calls?fn=${q(fn)}${entry ? `&entry=${q(entry)}` : ""}`)),
   source: (fn: string): Promise<SourceView> => cached(sources, fn, () => request(`/api/source?fn=${q(fn)}`)),
   map: (): Promise<MapData> => request("/api/map"),
+  /** Asks a question; `onEvent` gets each tool step as it happens, then the answer or an error (Build 5). */
+  async ask(body: AskRequest, onEvent: (event: AskEvent) => void): Promise<void> {
+    const res = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok || !res.body) throw new Error(`ask failed: ${res.status}`);
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      buffer += value ?? "";
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) if (line.trim()) onEvent(JSON.parse(line) as AskEvent);
+      if (done) break;
+    }
+  },
 };
