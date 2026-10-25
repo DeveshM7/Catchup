@@ -263,9 +263,11 @@ function understandSession(ws: Workspace, provider: Provider, maxCalls: number, 
     }
   };
   const digest = buildDigest({ facts, snapshot, signals, trees, readme: readReadme(dir), packageJson: readPackageJson(dir), readFile });
-  const digestDir = saveDigest(repoRoot, sha, digest.files);
+  // In a worktree the digests live inside it, so every path the agent sees is under the code it may read.
+  const digestDir = saveDigest(dir, sha, digest.files);
   const model = process.env.CATCHUP_MODEL ?? DEFAULT_MODEL;
   const passes: PassLog[] = [];
+  const rejections: { job: string; problems: string[] }[] = [];
   const say = (line: string): void => {
     if (!quiet) console.error(line);
   };
@@ -295,7 +297,10 @@ function understandSession(ws: Workspace, provider: Provider, maxCalls: number, 
           log: (entry) => passes.push(entry),
         }),
       onCall: (job, attempt) => say(`  claude (${model} via ${provider}): ${job}${attempt > 1 ? " (retry)" : ""}`),
-      onRejected: (job, problems) => say(`  validator rejected ${job}:\n${problems.map((p) => `    - ${p}`).join("\n")}`),
+      onRejected: (job, problems) => {
+        rejections.push({ job, problems });
+        say(`  validator rejected ${job}:\n${problems.map((p) => `    - ${p}`).join("\n")}`);
+      },
       onProgress: (partial) => saveUnderstanding(repoRoot, partial),
     }),
     finish: (command, stats) => {
@@ -311,6 +316,7 @@ function understandSession(ws: Workspace, provider: Provider, maxCalls: number, 
         toolCalls: toolCalls(),
         tokens,
         ...(stats ? { stats } : { failed: true }),
+        rejections,
         passes,
       };
       return saveRun(repoRoot, startedAt, run);

@@ -49,7 +49,12 @@ export async function runTimelapse(repoRoot: string, options: TimelapseOptions):
     let how = "stored";
     try {
       await withCode(repoRoot, cp.sha, (dir) => workspaceAt(repoRoot, dir, cp.sha));
-      if (!loadUnderstanding<Understanding>(repoRoot, cp.sha)) {
+      const stored = loadUnderstanding<Understanding>(repoRoot, cp.sha);
+      if (stored && stored.from === undefined && stored.extras === undefined) {
+        // A fresh tree an earlier run left half-written: finish it (finished passes are carried, D4).
+        await options.treeAt(repoRoot, cp.sha, { maxCalls: options.maxCalls, quiet: true });
+        how = "fresh (resumed)";
+      } else if (!stored) {
         const share = prev === undefined ? 0 : overlap(repoRoot, prev, cp.sha);
         if (prev !== undefined && share >= MIN_OVERLAP) {
           const { understanding } = await options.treeAt(repoRoot, cp.sha, { maxCalls: options.maxCalls, from: prev, quiet: true });

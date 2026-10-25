@@ -164,7 +164,7 @@ function legend(steps: NodeView[], data: TreeData, laneName: (id: string) => str
   const lanes = [...new Set(steps.map((s) => s.lane ?? "none"))];
   return [
     ...lanes.map((id) => ({ label: laneName(id), slot: data.nodes[id]?.color ?? 7 })),
-    ...(steps.some((s) => s.systems.length) ? [{ label: "Outside system", slot: -1 }] : []),
+    ...(steps.some((s) => s.systems.length) ? [{ label: steps.some((s) => s.systems.some((id) => data.nodes[id]?.short.startsWith("Outside tool"))) ? "Outside system or tool" : "Outside system", slot: -1 }] : []),
     ...(steps.some((s) => s.stepKind === "error") ? [{ label: "Error path", slot: 3, dashed: true }] : []),
     ...(steps.some((s) => s.stepKind === "branch") ? [{ label: "Only sometimes", slot: 4, dashed: true }] : []),
   ];
