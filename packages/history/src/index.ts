@@ -39,7 +39,7 @@ export function fileChurn(repoRoot: string, sha = "HEAD"): Map<string, FileChurn
 }
 
 const git = (repoRoot: string, args: string[]): string =>
-  execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+  execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
 
 /** A ref (`HEAD`, a tag, a short sha) as a full commit sha. */
 export function resolveCommit(repoRoot: string, ref: string): string {

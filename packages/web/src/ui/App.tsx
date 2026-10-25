@@ -10,6 +10,7 @@ import { Home } from "./Home";
 import { entryName, MethodLabel, Prose } from "./labels";
 import { Panel } from "./panels";
 import { changeCount, PreviewPage, usePreview } from "./Preview";
+import { TimelapsePage, type TimelapseStep } from "./Timelapse";
 import { formatRoute, parseRoute, type Route } from "./route";
 import { Search } from "./Search";
 import { StepsCanvas } from "./StepsCanvas";
@@ -63,6 +64,11 @@ export function App() {
   const [about, setAbout] = useState<string | null>(null);
   const [litTurn, setLitTurn] = useState<Turn | null>(null);
   const preview = usePreview(route.view === "preview");
+  const [hasTimelapse, setHasTimelapse] = useState(false);
+  const [timelapseStep, setTimelapseStep] = useState<TimelapseStep | null>(null);
+  useEffect(() => {
+    api.timelapses().then((all) => setHasTimelapse(all.length > 0), () => setHasTimelapse(false));
+  }, []);
 
   useEffect(() => {
     api.understanding().then(setData, (e: unknown) => setError(String(e)));
@@ -177,6 +183,7 @@ export function App() {
             {tab("arch", "Architecture", { view: "arch", id: route.view === "arch" ? route.id : "root" })}
             {tab("flows", "Flows", { view: "flows", id: flowParent?.id ?? data.journeys[0] ?? "" })}
             {tab("map", "Full map", { view: "map" })}
+            {hasTimelapse && tab("timelapse", "Timelapse", { view: "timelapse" })}
             {preview && preview.status !== "off" && (
               <button className={route.view === "preview" ? "active" : ""} onClick={() => go({ view: "preview" })}>
                 Preview{changeCount(preview.changes) > 0 && <span className="badge">{changeCount(preview.changes)}</span>}
@@ -243,6 +250,8 @@ export function App() {
         {route.view === "map" && <FullMap />}
 
         {route.view === "preview" && <PreviewPage view={preview} mode={mode} onSelect={select} />}
+
+        {route.view === "timelapse" && <TimelapsePage onStep={setTimelapseStep} />}
       </main>
 
       {sel && (
@@ -273,7 +282,13 @@ export function App() {
             setAsking(false);
             setLitTurn(null);
           }}
-          change={route.view === "preview" && preview?.changes ? { request: "preview", label: "uncommitted changes" } : null}
+          change={
+            route.view === "preview" && preview?.changes
+              ? { request: "preview", label: "uncommitted changes" }
+              : route.view === "timelapse" && timelapseStep
+                ? { request: { from: timelapseStep.from, to: timelapseStep.to }, label: timelapseStep.label }
+                : null
+          }
         />
       )}
     </div>

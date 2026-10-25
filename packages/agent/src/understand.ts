@@ -140,7 +140,9 @@ function checkSurvey(work: Work, out: SurveyOutput): string[] {
   out.parts.forEach((p, i) => problems.push(...checkWords(`part ${i + 1} ("${p.title}")`, { title: p.title, short: p.short, long: p.long })));
   problems.push(...assignFiles(out.parts, work.allFiles).problems);
 
-  problems.push(...checkCount("journeys", out.journeys.length, 1, 3));
+  // An app whose only entry points are screens (or tiny) has no journey to tell; then none is fine.
+  const candidates = [...work.trees.values()].filter((t) => t.entryPoint.kind !== "page" && t.functionCount >= MIN_TO_SPLIT);
+  problems.push(...checkCount("journeys", out.journeys.length, candidates.length ? 1 : 0, 3));
   const entries = new Set<string>();
   for (const j of out.journeys) {
     const tree = work.trees.get(j.entry);

@@ -161,3 +161,34 @@ export type PreviewView = {
 /** A change an Ask question is about (Build 8): its change set and the commits that made it (none for uncommitted work). */
 export type ChangeContextView = { label: string; changes: ChangeSetView; commits: { sha: string; date: string; subject: string }[] };
 
+
+/** One box in a timelapse frame (Build 9): present at this checkpoint; status against the previous frame. */
+export type FrameNode = { id: string; title: string; short: string; status: "same" | "added" | "changed" };
+
+/** One checkpoint of a timelapse, and the step that led to it (absent for the first frame). */
+export type TimelapseFrame = {
+  sha: string;
+  date: string;
+  subject: string;
+  tags: string[];
+  nodes: FrameNode[];
+  /** Boxes present in the previous frame and gone in this one (they fade out). */
+  removed: string[];
+  /** Edge ids (from the union layout) present at this checkpoint. */
+  edges: string[];
+  summary: string;
+  journeys: { title: string; steps: string[] }[];
+  step?: {
+    caption: string;
+    impact: string;
+    commits: { sha: string; subject: string }[];
+    /** How many commits the step spans, and what it changed. */
+    commitCount: number;
+    files: { added: number; removed: number; changed: number; renamed: number };
+    entryPoints: { added: string[]; removed: string[] };
+    systems: { added: string[]; removed: string[] };
+  };
+};
+
+/** A timelapse A → B: every frame drawn on one layout over the union of all frames' boxes, so nothing moves (D10). */
+export type TimelapseView = { from: string; to: string; layout: MapGraph; frames: TimelapseFrame[] };

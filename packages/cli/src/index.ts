@@ -33,6 +33,7 @@ import {
 import { loadExplained, loadFacts, loadSnapshot, loadUnderstanding, saveDigest, saveExplained, saveRun, saveUnderstanding, storePaths } from "@catchup/store";
 import { startDashboard } from "@catchup/web";
 import { analyzeAt, ancestorWithTree, changeSet, headSha, loadWorkspace, readReadme, resolveCommit, withCode, workspaceAt, type Workspace } from "./commits.js";
+import { runTimelapse } from "./timelapse.js";
 import { formatTree } from "./tree.js";
 import { formatUnderstanding } from "./understanding.js";
 
@@ -48,6 +49,7 @@ export function usage(): string {
     "  understand <path> [--max-calls N]        read-only Claude agents build the understanding tree",
     "  understand <path> --at <ref> [--from <ref>]   the tree at a commit, evolved from an earlier tree (edit, don't regenerate)",
     "  diff <path> <from> <to>        what changed between two commits with trees (files, entry points, systems, boxes, journeys)",
+    "  timelapse <path> [--from <ref>] [--to <ref>] [--count N]   trees at ~N checkpoints, captioned, played in the dashboard",
     '  understand <path> --open "<node id>"     write the children of an unopened node',
     "  open <path> [--port N]         show the understanding tree in your browser (opening a box or asking calls Claude)",
     '  ask <path> "<question>" [--node "<node id>"] [--changes <from>..<to>]   ask a read-only agent; answers cite real code (and commits)',
@@ -320,15 +322,16 @@ function understandSession(ws: Workspace, provider: Provider, maxCalls: number, 
  * The tree at one commit (Builds 2 and 6): carried forward when it exists, evolved from an earlier commit's tree when one
  * exists (edit, don't regenerate, D4), else written from scratch. Returns the tree and the change set when it evolved.
  */
-export async function treeAt(repoRoot: string, sha: string, options: { maxCalls: number; from?: string; open?: string; quiet?: boolean }): Promise<{ understanding: Understanding; evolvedFrom?: string }> {
+export async function treeAt(repoRoot: string, sha: string, options: { maxCalls: number; from?: string; fresh?: boolean; open?: string; quiet?: boolean }): Promise<{ understanding: Understanding; evolvedFrom?: string }> {
   const provider = loadEnv();
   return withCode(repoRoot, sha, async (dir) => {
     const ws = await workspaceAt(repoRoot, dir, sha);
     const startedAt = new Date();
     const session = understandSession(ws, provider, options.maxCalls, startedAt, options.quiet);
-    const previous = loadUnderstanding<Understanding>(repoRoot, sha);
+    // Fresh: write this commit's tree from scratch, whatever is stored for it.
+    const previous = options.fresh ? undefined : loadUnderstanding<Understanding>(repoRoot, sha);
     const inputs = session.inputs(previous);
-    const from = previous || options.open !== undefined ? undefined : (options.from ?? ancestorWithTree(repoRoot, sha));
+    const from = previous || options.open !== undefined || options.fresh ? undefined : (options.from ?? ancestorWithTree(repoRoot, sha));
     let stats: UnderstandStats | undefined;
     let command = options.open !== undefined ? `understand --open ${options.open}` : "understand";
     try {
@@ -371,6 +374,25 @@ async function understandCommand(target: string, options: UnderstandOptions): Pr
   if (result.evolvedFrom !== undefined) {
     console.log(`\nChanges since ${result.evolvedFrom.slice(0, 9)}:\n${formatChanges(changeSet(repoRoot, result.evolvedFrom, sha))}`);
   }
+}
+
+/** Builds (or rebuilds from stored pieces) a timelapse A → B and saves it for the dashboard (Build 9). */
+async function timelapseCommand(target: string, fromRef: string | undefined, toRef: string | undefined, count: number, maxCalls: number): Promise<void> {
+  const repoRoot = repoOf(target);
+  const provider = loadEnv();
+  const model = process.env.CATCHUP_MODEL ?? DEFAULT_MODEL;
+  const started = Date.now();
+  const view = await runTimelapse(repoRoot, {
+    ...(fromRef ? { from: resolveCommit(repoRoot, fromRef) } : {}),
+    to: resolveCommit(repoRoot, toRef ?? "HEAD"),
+    count,
+    maxCalls,
+    treeAt,
+    captionRunner: structuredRunner(provider, repoRoot, model),
+    say: (line) => console.log(line),
+  });
+  console.log(`\nTimelapse ${view.from.slice(0, 9)} → ${view.to.slice(0, 9)}: ${view.frames.length} frames, ${view.layout.nodes.length} boxes in the union layout, ${((Date.now() - started) / 1000).toFixed(0)} s`);
+  console.log(`Play it with: catchup open ${target} (Timelapse tab)`);
 }
 
 /** Prints (and saves) what changed between two commits that have trees (Build 6). */
@@ -472,7 +494,9 @@ export async function main(argvIn: string[]): Promise<number> {
   const { value: nodeValue, rest: afterNode } = option(afterMax, "--node");
   const { value: atValue, rest: afterAt } = option(afterNode, "--at");
   const { value: fromValue, rest: afterFrom } = option(afterAt, "--from");
-  const { value: changesValue, rest: argv } = option(afterFrom, "--changes");
+  const { value: changesValue, rest: afterChanges } = option(afterFrom, "--changes");
+  const { value: toValue, rest: afterTo } = option(afterChanges, "--to");
+  const { value: countValue, rest: argv } = option(afterTo, "--count");
   const showNoise = argv.includes("--all");
   const [command, target = ".", label, ...more] = argv.filter((arg) => arg !== "--all");
   if (command === "explain") {
@@ -504,6 +528,13 @@ export async function main(argvIn: string[]): Promise<number> {
   }
   if (command === "init") {
     await init(target, atValue);
+    return 0;
+  }
+  if (command === "timelapse") {
+    const count = countValue === undefined ? 15 : Number(countValue);
+    if (!Number.isInteger(count) || count < 2) throw new Error("--count needs a number ≥ 2");
+    const maxCalls = maxCallsValue === undefined ? DEFAULT_MAX_TOOL_CALLS : Number(maxCallsValue);
+    await timelapseCommand(target, fromValue, toValue, count, maxCalls);
     return 0;
   }
   if (command === "diff") {

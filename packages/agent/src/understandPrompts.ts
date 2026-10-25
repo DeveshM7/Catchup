@@ -57,7 +57,7 @@ export function surveyPrompt(ctx: PromptContext): string {
       "Leftovers (config, tests, scripts) can share a part such as \"Tooling and tests\". Outside systems (databases, AI providers) are shown separately: no parts for them.",
     "- journeys: 1–3 main journeys, the things users do that the app exists for. entry: an entry point id from entries.md, exactly as written inside the backticks. " +
       "Prefer a `ui:` entry whose tree continues into the server, so the journey runs from the browser to the server and back. " +
-      "Each journey from a different family: entries in one family run mostly the same code (e.g. a CLI command and the library function it calls). Only entries that reach at least 3 functions; fewer journeys are fine. title: what the user does (\"Sending a message\").",
+      "Each journey from a different family: entries in one family run mostly the same code (e.g. a CLI command and the library function it calls). Only entries that reach at least 3 functions; fewer journeys are fine, and none if no such entry exists (pages are screens, never journeys). title: what the user does (\"Sending a message\").",
     `- otherFlows: for the ${OTHER_FLOWS} best-ranked families in entries.md that hold none of your journeys' entry points, one line each (at most ${WORDS.line.ask} words: what it does for the user). family: the id in backticks at the start of its heading, without the backticks.`,
   ].join("\n");
 }

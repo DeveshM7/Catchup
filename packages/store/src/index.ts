@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Facts, Signals, Snapshot } from "@catchup/analyzer";
 
@@ -119,4 +119,41 @@ export function saveRun(repoRoot: string, startedAt: Date, run: unknown): string
   ensureIgnored(repoRoot);
   writeJson(path, run);
   return path;
+}
+
+/** A built timelapse (Build 9): `timelapse/<from>..<to>.json`. */
+export function saveTimelapse<T extends { from: string; to: string }>(repoRoot: string, view: T): string {
+  const path = join(repoRoot, CATCHUP_DIR, "timelapse", `${view.from}..${view.to}.json`);
+  ensureIgnored(repoRoot);
+  writeJson(path, view);
+  return path;
+}
+
+/** Every stored timelapse, newest file name last (`<from>..<to>`). */
+export function listTimelapses(repoRoot: string): { from: string; to: string }[] {
+  const dir = join(repoRoot, CATCHUP_DIR, "timelapse");
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
+    .map((f) => {
+      const [from = "", to = ""] = f.slice(0, -".json".length).split("..");
+      return { from, to };
+    });
+}
+
+export function loadTimelapse<T>(repoRoot: string, from: string, to: string): T | undefined {
+  const path = join(repoRoot, CATCHUP_DIR, "timelapse", `${from}..${to}.json`);
+  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as T) : undefined;
+}
+
+/** A step's caption, cached so a rebuilt timelapse makes no Claude call (D4). */
+export function saveCaption<T>(repoRoot: string, from: string, to: string, caption: T): void {
+  ensureIgnored(repoRoot);
+  writeJson(join(repoRoot, CATCHUP_DIR, "captions", `${from}..${to}.json`), caption);
+}
+
+export function loadCaption<T>(repoRoot: string, from: string, to: string): T | undefined {
+  const path = join(repoRoot, CATCHUP_DIR, "captions", `${from}..${to}.json`);
+  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as T) : undefined;
 }

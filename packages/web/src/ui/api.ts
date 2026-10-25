@@ -1,4 +1,4 @@
-import type { AskEvent, AskRequest, MapData, MapGraph, PreviewView, SourceView, TreeData, TreeView } from "../shared/types";
+import type { AskEvent, AskRequest, MapData, MapGraph, PreviewView, SourceView, TimelapseView, TreeData, TreeView } from "../shared/types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
@@ -36,6 +36,9 @@ export const api = {
     cached(calls, `fn:${fn}:${entry ?? ""}`, () => request(`/api/calls?fn=${q(fn)}${entry ? `&entry=${q(entry)}` : ""}`)),
   source: (fn: string): Promise<SourceView> => cached(sources, fn, () => request(`/api/source?fn=${q(fn)}`)),
   map: (): Promise<MapData> => request("/api/map"),
+  /** Stored timelapses (Build 9), oldest file name first. */
+  timelapses: (): Promise<{ from: string; to: string }[]> => request("/api/timelapses"),
+  timelapse: (from: string, to: string): Promise<TimelapseView> => request(`/api/timelapse?from=${q(from)}&to=${q(to)}`),
   /** The live preview's latest state (Build 7); not cached, it changes with every save. */
   preview: (): Promise<PreviewView> => request("/api/preview"),
   /** A canvas of the working tree's tree; keyed by when the preview was computed. */

@@ -5,9 +5,9 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import type { Understanding } from "@catchup/agent";
 import { createServer, type Plugin, type ViteDevServer } from "vite";
-import type { AskEvent, AskRequest, AskStep, ChangeContextView, ChangeSetView, MapGraph, PreviewView, SourceView, TreeData } from "../shared/types.js";
+import type { AskEvent, AskRequest, AskStep, ChangeContextView, ChangeSetView, MapGraph, PreviewView, SourceView, TimelapseView, TreeData } from "../shared/types.js";
 import { commitsBetween } from "@catchup/history";
-import { loadChanges } from "@catchup/store";
+import { listTimelapses, loadChanges, loadTimelapse } from "@catchup/store";
 import { Preview, type PreviewResult } from "./preview.js";
 import { buildMap, callsOf, treeView, type DashboardInputs } from "./data.js";
 import { canvasGraph, treeData } from "./understanding.js";
@@ -212,7 +212,7 @@ class PreviewApi {
 
 /**
  * JSON API over stored analysis (127.0.0.1 only): GET /api/understanding, /api/canvas?id=, /api/calls?entry=&fn=,
- * /api/source?fn=, /api/map; POST /api/open?id= runs the Open pass, POST /api/ask streams an answer (Build 5). Only Open writes.
+ * /api/source?fn=, /api/map; POST /api/open?id= runs the Open pass, POST /api/ask streams an answer (Build 5); /api/preview (Build 7), /api/timelapses and /api/timelapse?from=&to= (Build 9). Only Open writes.
  */
 function apiPlugin(inputs: DashboardInputs, preview: Preview | undefined): Plugin {
   const map = buildMap(inputs);
@@ -242,6 +242,8 @@ function apiPlugin(inputs: DashboardInputs, preview: Preview | undefined): Plugi
         if (req.method !== "GET") return send(res, 405, { error: "read-only" });
         if (url.pathname === "/api/understanding") return reply(res, Promise.resolve(state.data()), "no understanding yet; run: catchup understand <path>");
         if (url.pathname === "/api/preview") return send(res, 200, previewApi.view());
+        if (url.pathname === "/api/timelapses") return send(res, 200, listTimelapses(inputs.repoRoot));
+        if (url.pathname === "/api/timelapse") return reply(res, Promise.resolve(loadTimelapse<TimelapseView>(inputs.repoRoot, param("from"), param("to"))), "no such timelapse; run: catchup timelapse <path>");
         if (url.pathname === "/api/preview/canvas") return reply(res, previewApi.canvas(param("id")), "no preview canvas for this node");
         if (url.pathname === "/api/canvas") return reply(res, state.canvas(param("id")), "no canvas for this node");
         if (url.pathname === "/api/map") return reply(res, map, "no map");

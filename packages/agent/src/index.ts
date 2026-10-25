@@ -8,6 +8,7 @@ export { buildDigest, flowDigestName, type Digest, type DigestInputs } from "./d
 export * from "./tree.js";
 export { askPrompt, askQuestion, AskOutput, checkAnswer, splitCites, type Answer, type AskInputs, type AskTurn, type ChangeContext } from "./ask.js";
 export { diffTrees, formatChanges, type ChangeSet, type JourneyChange, type NodeChange } from "./changes.js";
+export { captionPrompt, captionStep, checkCaption, type Caption, type StepCommit } from "./timelapse.js";
 export { evolve, remapper, type EvolveInputs, type Remap } from "./evolve.js";
 export { MAX_DEPTH, MIN_TO_SPLIT, openNode, understand, type UnderstandInputs, type UnderstandStats } from "./understand.js";
 export { explainOverview, mainFlows, overviewLinks, overviewPrompt, SECOND_FLOW_SHARE, validateOverview, type MainFlow } from "./overview.js";
