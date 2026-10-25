@@ -45,7 +45,7 @@ function NodePanel({ node, data, mode, onSelect, onOpen }: Props & { node: NodeV
   const opens = canOpen(node);
   return (
     <div className="panel">
-      <div className="eyebrow">{node.kind === "step" ? stepLabel(node, data) : KIND[node.kind]}{node.entry ? ` · ${entryName(node.entry, data).name}` : ""}</div>
+      <div className="eyebrow">{node.kind === "step" ? stepLabel(node, data) : node.kind === "system" && node.short.startsWith("Outside tool") ? "Outside tool" : KIND[node.kind]}{node.entry ? ` · ${entryName(node.entry, data).name}` : ""}</div>
       <h2 className={mode === "expert" ? "mono" : ""}>{title}</h2>
       {text && <p><Prose text={text} /></p>}
       {opens && (

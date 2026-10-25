@@ -60,7 +60,7 @@ export async function buildMap(inputs: DashboardInputs): Promise<MapData> {
     ...snapshot.externals.map((e) => ({
       id: e.id,
       label: e.name,
-      description: `Outside system (${e.packages.join(", ")})`,
+      description: `${e.kind === "tool" ? "Outside tool" : "Outside system"} (${e.packages.join(", ")})`,
       kind: "external" as const,
       files: 0,
       functions: 0,

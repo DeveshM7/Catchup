@@ -65,7 +65,7 @@ export type CallTree = {
 };
 
 export type TreeLimits = { maxDepth: number; maxFunctions: number };
-export const DEFAULT_TREE_LIMITS: TreeLimits = { maxDepth: 8, maxFunctions: 300 };
+export const DEFAULT_TREE_LIMITS: TreeLimits = { maxDepth: 12, maxFunctions: 300 };
 
 const WRITE_CALLEE =
   /(^|\.)(create(?!Client|Pool|Connection)|insert|update|upsert|delete|remove|save|set|del|incr|decr|push|publish|send|produce|write|executeRaw)\w*$/i;

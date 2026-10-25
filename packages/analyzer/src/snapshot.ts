@@ -15,6 +15,8 @@ export type ComponentEdge = { from: string; to: string; weight: number };
 export type ExternalSystem = {
   id: string;
   name: string;
+  /** A compiler or bundler the code drives (D53); absent: a service it talks to (database, API, AI model). */
+  kind?: "tool";
   packages: string[];
   usedBy: string[];
 };

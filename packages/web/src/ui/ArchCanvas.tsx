@@ -45,7 +45,7 @@ export const boxBody =
       return (
         <>
           <span className="node-title"><NodeIcon kind="external" />{n.label}</span>
-          <span className="node-sub">outside system</span>
+          <span className="node-sub">{n.description.toLowerCase()}</span>
         </>
       );
     }
@@ -95,7 +95,7 @@ export function ArchCanvas({ id, data, mode, scope, selected, onSelect, onOpen }
       <Legend
         items={[
           files ? { label: "File", slot: graph.nodes[0]?.color ?? 1 } : { label: "Part of the code", slot: 1 },
-          ...(graph.nodes.some((n) => n.kind === "external") ? [{ label: "Outside system", slot: -1 }] : []),
+          ...[...new Set(graph.nodes.flatMap((n) => (n.kind === "external" ? [n.description] : [])))].map((label) => ({ label, slot: -1 })),
         ]}
       />
     </>

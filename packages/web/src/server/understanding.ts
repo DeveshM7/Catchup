@@ -167,6 +167,7 @@ export async function canvasGraph(inputs: TreeInputs, id: string): Promise<MapGr
     return { id: key, from, to, weight, kind: "import", main: false };
   });
   const systems = new Set<string>();
+  const tools = new Set(inputs.snapshot.externals.flatMap((e) => (e.kind === "tool" ? [e.name] : [])));
   for (const m of list) {
     for (const name of unique(m.anchor.flatMap((f) => inputs.signals.files[f]?.systems ?? [])).sort()) {
       systems.add(name);
@@ -175,7 +176,7 @@ export async function canvasGraph(inputs: TreeInputs, id: string): Promise<MapGr
   }
   const nodes: Omit<MapNode, "x" | "y" | "width" | "height">[] = [
     ...list.map(({ id, label, description, kind, files, functions, color }) => ({ id, label, description, kind, files, functions, color })),
-    ...[...systems].sort().map((name) => ({ id: systemNodeId(name), label: name, description: "Outside system", kind: "external" as const, files: 0, functions: 0, color: -1 })),
+    ...[...systems].sort().map((name) => ({ id: systemNodeId(name), label: name, description: tools.has(name) ? "Outside tool" : "Outside system", kind: "external" as const, files: 0, functions: 0, color: -1 })),
   ];
   return layoutMap(nodes, markMain(edges), (n) => BOX[n.kind === "file" ? "file" : n.kind === "external" ? "external" : "part"]);
 }

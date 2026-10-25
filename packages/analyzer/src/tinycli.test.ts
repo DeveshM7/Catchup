@@ -38,6 +38,10 @@ describe("analyze fixtures/tiny-cli (known answers, Build 1)", () => {
       "src/cli-main.ts#main.command:[...files]",
       "src/build.ts#build",
       "src/config.ts#loadConfig",
+      "src/dts.ts#(module)",
+      "src/dts.ts#on:message",
+      "src/dts.ts#emitTypes",
+      "src/dts.ts#Pool.add",
       "src/clean.ts#clean",
       "src/clean.ts#removeDir",
       "src/errors.ts#handleError",
@@ -56,5 +60,18 @@ describe("analyze fixtures/tiny-cli (known answers, Build 1)", () => {
     const watch = facts.calls.find((c) => c.from === "src/build.ts#build" && c.callee === "watch");
     expect(watch).toMatchObject({ kind: "external", target: "chokidar", conditional: true });
     expect(tree("tiny-cli: build()").partial).toBe(false);
+  });
+
+  it("follows `new Worker(<our file>)` into that file's top-level code (D52)", () => {
+    const worker = facts.calls.find((c) => c.callee === "new Worker(src/dts.ts)");
+    expect(worker).toMatchObject({ from: "src/build.ts#build", to: "src/dts.ts#(module)", kind: "direct", passed: true });
+  });
+
+  it("records nothing for `new` on our class without a constructor; the TypeScript compiler is a tool (D52, D53)", () => {
+    const emit = facts.calls.filter((c) => c.from === "src/dts.ts#emitTypes");
+    expect(emit.map((c) => c.to ?? c.target)).toEqual(["src/dts.ts#Pool.add", "typescript", "typescript"]);
+    expect(snapshot.externals).toEqual([{ id: "ext:typescript", name: "TypeScript compiler", kind: "tool", packages: ["typescript"], usedBy: ["src"] }]);
+    expect(tree("$ tc").partial).toBe(false);
+    expect(tree("$ tc").systems).toEqual(["TypeScript compiler"]);
   });
 });

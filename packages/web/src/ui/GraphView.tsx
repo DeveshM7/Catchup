@@ -45,7 +45,7 @@ function defaultBody(node: MapNode): ReactNode {
   return (
     <>
       <span className="node-title"><NodeIcon kind={node.kind} />{node.label}</span>
-      <span className="node-sub">{node.kind === "external" ? "outside system" : `${node.files} files`}</span>
+      <span className="node-sub">{node.kind === "external" ? node.description.split(" (")[0]!.toLowerCase() : `${node.files} files`}</span>
     </>
   );
 }

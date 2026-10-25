@@ -11,7 +11,7 @@ export function packageName(specifier: string): string {
  * `packages` may hold a subpath (`drizzle-orm/postgres-js`) when only that entry point talks to the
  * system; `exclude` drops UI-only packages that match a prefix.
  */
-type Rule = { id: string; name: string; packages: string[]; prefixes?: string[]; exclude?: string[] };
+type Rule = { id: string; name: string; packages: string[]; prefixes?: string[]; exclude?: string[]; kind?: "tool" };
 
 /** Package → external system. Not exhaustive: unknown packages stay as plain `pkg:` imports. */
 export const EXTERNAL_SYSTEMS: Rule[] = [
@@ -65,6 +65,19 @@ export const EXTERNAL_SYSTEMS: Rule[] = [
   { id: "github", name: "GitHub API", packages: [], prefixes: ["@octokit/"] },
   { id: "clerk", name: "Clerk", packages: [], prefixes: ["@clerk/"] },
   { id: "auth0", name: "Auth0", packages: ["auth0", "@auth0/nextjs-auth0"] },
+  // Tools (D53): compilers, bundlers and minifiers a build tool drives. Shown like systems, labelled as tools.
+  { id: "esbuild", name: "esbuild", packages: ["esbuild"], kind: "tool" },
+  { id: "rollup", name: "Rollup", packages: ["rollup", "rollup-plugin-dts"], prefixes: ["@rollup/"], kind: "tool" },
+  { id: "webpack", name: "webpack", packages: ["webpack"], kind: "tool" },
+  { id: "vite", name: "Vite", packages: ["vite"], kind: "tool" },
+  { id: "typescript", name: "TypeScript compiler", packages: ["typescript"], kind: "tool" },
+  { id: "babel", name: "Babel", packages: [], prefixes: ["@babel/"], kind: "tool" },
+  { id: "swc", name: "SWC", packages: ["@swc/core"], kind: "tool" },
+  { id: "sucrase", name: "Sucrase", packages: ["sucrase"], kind: "tool" },
+  { id: "terser", name: "Terser", packages: ["terser"], kind: "tool" },
+  { id: "postcss", name: "PostCSS", packages: ["postcss", "postcss-load-config"], kind: "tool" },
+  { id: "svelte-compiler", name: "Svelte compiler", packages: ["svelte/compiler", "svelte-preprocess"], kind: "tool" },
+  { id: "api-extractor", name: "API Extractor", packages: ["@microsoft/api-extractor"], kind: "tool" },
 ];
 
 export function externalFor(pkg: string): Rule | undefined {
@@ -91,9 +104,10 @@ export function detectExternals(packagesByComponent: Map<string, Set<string>>): 
     }
   }
   return [...found.values()]
-    .map(({ rule, packages, usedBy }) => ({
+    .map(({ rule, packages, usedBy }): ExternalSystem => ({
       id: `ext:${rule.id}`,
       name: rule.name,
+      ...(rule.kind ? { kind: rule.kind } : {}),
       packages: [...packages].sort(compareStrings),
       usedBy: [...usedBy].sort(compareStrings),
     }))

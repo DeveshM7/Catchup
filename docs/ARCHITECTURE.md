@@ -80,11 +80,13 @@ type EntryKind = "http" | "page" | "ui" | "action" | "cli" | "library" | "main" 
 
 - Components (D19): workspace packages, else depth-1 folders (`src/` transparent), split big ones, merge tiny ones, cap 25. Component ID = path. These are no longer what the user sees as "parts": they're a stable fallback and an input to the agent (D37).
 - Edges: file imports rolled up to component → component, weighted by count.
-- External systems from imported packages via a lookup table (`packages/analyzer/src/externals.ts`, D29).
+- External systems from imported packages via a lookup table (`packages/analyzer/src/externals.ts`, D29): services (databases, APIs, AI models) and tools (compilers, bundlers, minifiers a build tool drives: esbuild, Rollup, the TypeScript compiler, …), shown alike and labelled `tool` (D53).
 
 ## 3. Behavior (call trees)
 
-For each entry point: start at its handler, resolve each call with the type checker, recurse; stop at packages (record the system) and at limits (depth 8, 300 functions). Order, conditionals, parallel, `catch`, tools (D33) are recorded. Scoring (D21): important / normal / noise; noise is low priority, never deleted.
+For each entry point: start at its handler, resolve each call with the type checker, recurse; stop at packages (record the system) and at limits (depth 12, 300 functions; D52). Order, conditionals, parallel, `catch`, tools (D33) are recorded. Scoring (D21): important / normal / noise; noise is low priority, never deleted.
+
+**Worker threads (D52):** `new Worker(<path>)` from `worker_threads`, where a string written in the argument names one of our files (relative to the caller, any source extension), is a passed call to that file's `(module)` unit; such files get one like bins do. `new X()` on our class without a constructor calls the nearest base constructor of ours, or nothing (not a runtime-only call).
 
 **Journeys across the boundary (Build 1, D43):** `remote` calls point at the route handler, so a client tree continues into the server's tree, and `message` calls continue back into the browser: UI → hook → route → model → tools → artifact writers → client handlers. A UI event handler met inside another tree is shown but not expanded (`stop: "event"`): it has its own `ui:` entry point. The client function that receives a message is shown but not expanded either (`stop: "message"`, D46): the journey ends where the browser gets it. Calls reached by a request, a message or as an AI tool are always important.
 

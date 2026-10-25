@@ -107,3 +107,11 @@ _Today = `catchup init` + `catchup flow` at 198479b, before Build 4 fixes._
 | Step 5 (dts worker) visible | `src/rollup.ts` is in no tree (`new Worker(path)`) | link `new Worker(<path to our file>)` to that file's module unit, as a passed call. Generic for worker threads |
 | Flows complete | every flow is "partial": `new Function(…)` in `jsoncParse`, `new AliasPool()` (local class without a constructor), plugin-object methods | a local class without a constructor is not dynamic (nothing to call); `new Function` stays dynamic |
 | 2 parts or more by role (CLI, orchestrator, config, esbuild, output plugins, declarations, utilities) | D19 gives 5 folder groups (`src`, `src/esbuild`, `src/plugins`, …), 36 files | the Survey pass should do this (Build 2); checked by the first real run |
+
+### After the first Build 4 fixes (D52, D53)
+
+- Bin journey: 115 functions (was 53), reaching esbuild, the output plugin factories, the dts worker (`src/rollup.ts#(module)` → `on:message` → `startRollup`) and the TypeScript compiler.
+- Tools: esbuild, Rollup, Sucrase, TypeScript compiler, PostCSS found. Terser and SWC are loaded with `localRequire("terser")` (a dynamic `require`) and stay unseen.
+- Still partial, honestly: `new Function` in `jsoncParse`, the stored `onSuccess` cleanup, `minify`/`sveltePreprocessor` from `localRequire`, a debounce callback.
+- Output plugins' `renderChunk` hooks: still invisible; left as a known limit until the Understand run shows whether the agent covers them from the code (user choice).
+

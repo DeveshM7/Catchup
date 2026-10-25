@@ -3,7 +3,8 @@ import { join, resolve } from "node:path";
 import ts from "typescript";
 import type { Facts, FileFact, FunctionFact } from "./facts.js";
 import { countLines, findPackageDirs, isSourcePath, languageOf, listRepoPaths } from "./files.js";
-import { extractFunctions } from "./functions.js";
+import { extractFunctions, scriptKind } from "./functions.js";
+import { workerStarts } from "./workers.js";
 import { extractImports } from "./imports.js";
 import { componentName, DEFAULT_GROUPING, groupFiles, type GroupingOptions } from "./structure.js";
 import { packagesByComponent, rollUpEdges } from "./edges.js";
@@ -41,16 +42,19 @@ export async function analyze(repoPath: string, sha: string, options: AnalyzeOpt
   const paths = listRepoPaths(repoRoot);
   const sourcePaths = paths.filter(isSourcePath);
   const packages = readPackages(repoRoot, paths, new Set(sourcePaths));
-  const moduleFiles = new Set(packages.flatMap((p) => p.bins.map((b) => b.file)));
+  const texts = new Map<string, string>();
+  for (const path of sourcePaths) {
+    try {
+      texts.set(path, readFileSync(join(repoRoot, path), "utf8"));
+    } catch {
+      // tracked in the index but deleted from the working tree
+    }
+  }
+  // Bins and worker-thread files run their top-level code: they get a `(module)` unit.
+  const moduleFiles = new Set([...packages.flatMap((p) => p.bins.map((b) => b.file)), ...workerFiles(texts)]);
   const files: FileFact[] = [];
   const functions: FunctionFact[] = [];
-  for (const path of sourcePaths) {
-    let text: string;
-    try {
-      text = readFileSync(join(repoRoot, path), "utf8");
-    } catch {
-      continue; // tracked in the index but deleted from the working tree
-    }
+  for (const [path, text] of texts) {
     files.push({ path, lang: languageOf(path), loc: countLines(text) });
     functions.push(...extractFunctions(path, text, moduleFiles.has(path)));
   }
@@ -133,6 +137,14 @@ export function buildSnapshot(facts: Facts, packageDirs: string[], grouping: Gro
       externals: externals.length,
     },
   };
+}
+
+/** Files some `new Worker(…)` starts (D52). */
+function workerFiles(texts: Map<string, string>): string[] {
+  const known = new Set(texts.keys());
+  return [...texts].flatMap(([path, text]) =>
+    text.includes("Worker") ? workerStarts(path, ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, scriptKind(path)), known).map((w) => w.file) : [],
+  );
 }
 
 function defaultExportName(sourceFile: ts.SourceFile | undefined): string | undefined {

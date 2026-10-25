@@ -4,9 +4,10 @@ import ts from "typescript";
 import type { CallFact, ImportFact, Side } from "./facts.js";
 import { PKG_PREFIX } from "./facts.js";
 import { externalFor, packageOfSpecifier } from "./externals.js";
-import { collectFunctions, jsxEventOf, jsxTagName, registrationOf, type FunctionNode } from "./functions.js";
+import { collectFunctions, jsxEventOf, jsxTagName, MODULE_UNIT, registrationOf, type FunctionNode } from "./functions.js";
 import { matchRoutes, PLACEHOLDER, type Route } from "./links.js";
 import { packageName } from "./imports.js";
+import { workerStarts } from "./workers.js";
 import { compareStrings } from "./sort.js";
 
 type Context = {
@@ -24,6 +25,8 @@ type Context = {
   serverFiles: Set<string>;
   /** Package → our routes written into a call to it (`useChat({ api: "/api/chat" })`): it requests them later. */
   configured: Map<string, Route[]>;
+  /** `new Worker(…)` expressions → the source file the worker runs (D52). */
+  workers: Map<ts.Node, string>;
 };
 
 type Resolution = Pick<CallFact, "to" | "kind" | "target" | "oneOf">;
@@ -44,9 +47,12 @@ function packageOfFile(fileName: string): Origin {
   const normalized = fileName.split(sep).join("/");
   const at = normalized.lastIndexOf("/node_modules/");
   if (at === -1) return BUILTIN;
-  let pkg = packageName(normalized.slice(at + "/node_modules/".length));
+  const inner = normalized.slice(at + "/node_modules/".length);
+  let pkg = packageName(inner);
   if (pkg.startsWith("@types/")) pkg = pkg.slice("@types/".length).replace("__", "/");
-  return pkg === "typescript" || pkg === "node" || isBuiltin(pkg) ? BUILTIN : pkg;
+  // TypeScript's own lib files (`lib.es2020.d.ts`) are built-ins; `typescript.d.ts` is the compiler a repo may drive.
+  if (pkg === "typescript") return /\/lib\/lib\.[^/]*\.d\.ts$/.test(inner) ? BUILTIN : pkg;
+  return pkg === "node" || isBuiltin(pkg) ? BUILTIN : pkg;
 }
 
 function isLocalSpecifier(ctx: Context, spec: string): boolean {
@@ -590,6 +596,21 @@ function passedFunctions(ctx: Context, call: ts.CallExpression | ts.NewExpressio
   for (const arg of call.arguments ?? []) visitArg(arg);
   return found;
 }
+/**
+ * `new X()` for one of our classes without its own constructor: the nearest base class constructor of ours, else
+ * nothing to record (field initializers only). Not a runtime-only call.
+ */
+function inheritedConstructor(ctx: Context, cls: ts.ClassLikeDeclaration, depth = 0): Resolution | undefined {
+  const base = cls.heritageClauses?.find((h) => h.token === ts.SyntaxKind.ExtendsKeyword)?.types[0]?.expression;
+  if (!base || depth > MAX_TRACE_DEPTH) return undefined;
+  for (const decl of aliased(ctx.checker, ctx.checker.getSymbolAtLocation(base))?.declarations ?? []) {
+    if (!ts.isClassDeclaration(decl) && !ts.isClassExpression(decl)) continue;
+    const id = ctx.idOfNode.get(decl.members.find(ts.isConstructorDeclaration) ?? decl);
+    return id !== undefined ? { to: id, kind: "direct" } : inheritedConstructor(ctx, decl, depth + 1);
+  }
+  return undefined;
+}
+
 function resolveCall(ctx: Context, call: ts.CallExpression | ts.NewExpression): Resolution[] {
   const expr = call.expression;
   if (expr.kind === ts.SyntaxKind.SuperKeyword || expr.kind === ts.SyntaxKind.ImportKeyword) return [];
@@ -607,6 +628,8 @@ function resolveNamedCall(ctx: Context, expr: ts.Expression, nameNode: ts.Identi
     const id = fnNode && ctx.idOfNode.get(fnNode);
     if (id !== undefined) return { to: id, kind: "direct" };
   }
+  const cls = symbol?.declarations?.find((d): d is ts.ClassLikeDeclaration => ts.isClassDeclaration(d) || ts.isClassExpression(d));
+  if (cls && ctx.sourceFiles.has(repoPath(ctx, cls.getSourceFile().fileName) ?? "")) return inheritedConstructor(ctx, cls);
   const decl = symbol?.declarations?.[0];
   if (decl) {
     const file = repoPath(ctx, decl.getSourceFile().fileName);
@@ -938,6 +961,9 @@ function callsInUnit(ctx: Context, id: string, unit: FunctionNode | ts.SourceFil
       for (const link of ts.isCallExpression(node) ? configuredCalls(ctx, file, node) : []) {
         calls.push({ from: id, kind: "direct", line, ...link, ...flags, ...(link.oneOf ? { conditional: true } : {}) });
       }
+      // A worker thread runs its file's top-level code once it starts.
+      const worker = ctx.workers.get(node);
+      if (worker !== undefined) calls.push({ from: id, to: `${worker}#${MODULE_UNIT}`, kind: "direct", line, callee: `new Worker(${worker})`, ...flags, passed: true });
       // A passed function runs only if and when the receiver calls it.
       for (const passed of passedFunctions(ctx, node)) {
         calls.push({ from: id, to: passed.to, kind: "direct", line, callee: passed.callee, ...flags, conditional: true, passed: true });
@@ -1084,9 +1110,16 @@ export function extractCalls(
     routes,
     serverFiles,
     configured: new Map(),
+    workers: new Map(),
   };
+  const ids = new Set(idOfNode.values());
   const files = sourceFiles.flatMap((path) => program.getSourceFile(`${repoRoot}/${path}`) ?? []);
   if (routes.length > 0) ctx.configured = configuredRoutes(ctx, files);
+  for (const sf of files) {
+    const path = repoPath(ctx, sf.fileName);
+    if (path === undefined) continue;
+    for (const { node, file } of workerStarts(path, sf, ctx.sourceFiles)) if (ids.has(`${file}#${MODULE_UNIT}`)) ctx.workers.set(node, file);
+  }
   const calls = [...units.flatMap(({ id, node }) => callsInUnit(ctx, id, node)), ...messageLinks(ctx, files, sides)];
   // Stable sort: calls stay in evaluation order within each function.
   return calls.sort((a, b) => compareStrings(a.from, b.from));

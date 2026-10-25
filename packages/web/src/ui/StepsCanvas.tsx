@@ -46,7 +46,7 @@ export function StepsCanvas({ parent, data, mode, scope, selected, onSelect, onO
               style={{ left: lane.x, top: lane.y, width: lane.width, height: lane.height, ...cssVars(lane.kind === "systems" ? -1 : (data.nodes[lane.id]?.color ?? 7)) }}
             >
               {lane.kind === "systems" ? (
-                <span className="lane-title">Outside systems</span>
+                <span className="lane-title">Outside systems and tools</span>
               ) : (
                 <button
                   className="lane-title"

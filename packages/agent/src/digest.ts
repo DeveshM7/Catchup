@@ -90,9 +90,9 @@ function repoDigest(inputs: DigestInputs): string {
     "## Components (folders grouped by code, D19; a starting point, not the final parts)",
     ...snapshot.components.map((c) => `- ${c.id}: ${c.files.length} files, ${c.functionCount} functions${c.packages.length ? `; packages: ${c.packages.slice(0, 8).join(", ")}` : ""}`),
     "",
-    "## Outside systems",
+    "## Outside systems and tools",
     ...(snapshot.externals.length
-      ? snapshot.externals.map((e) => `- ${e.name}: ${e.packages.join(", ")} (used by ${e.usedBy.join(", ")})`)
+      ? snapshot.externals.map((e) => `- ${e.name}${e.kind === "tool" ? " (tool)" : ""}: ${e.packages.join(", ")} (used by ${e.usedBy.join(", ")})`)
       : ["(none)"]),
   ].join("\n");
 }

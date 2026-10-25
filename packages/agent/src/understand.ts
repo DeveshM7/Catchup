@@ -393,7 +393,7 @@ function systemNodes(work: Work): string[] {
       id,
       kind: "system",
       title: ext.name,
-      short: `Outside system, through ${ext.packages.join(", ")}`,
+      short: `${ext.kind === "tool" ? "Outside tool" : "Outside system"}, through ${ext.packages.join(", ")}`,
       long: `Called directly from ${files.length} file${files.length === 1 ? "" : "s"}.`,
       anchor: { files, functions: [] },
       children: "leaf",
