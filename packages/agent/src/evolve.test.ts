@@ -183,4 +183,27 @@ describe("offline evolve for the live preview (Build 7)", async () => {
     expect(changes.journeys[0]).toMatchObject({ systemsAdded: ["Redis"], checksRemoved: ["Check the user"], functionsRemoved: ["lib/auth.ts#requireUser"] });
     expect(changes.entryPoints.added).toEqual(["GET /api/export"]);
   });
+
+  it("keeps both ids when two steps cite the same functions", async () => {
+    const journey = treeA.nodes[`journey:${SEND}`]!;
+    const first = (journey.children as string[])[0]!;
+    const twin = { ...treeA.nodes[first]!, id: `${first}~2`, title: "Update the screen" };
+    const doubled: Understanding = {
+      ...treeA,
+      nodes: { ...treeA.nodes, [journey.id]: { ...journey, children: [...(journey.children as string[]), twin.id] }, [twin.id]: twin },
+    };
+    const { understanding: preview } = await evolve({ ...b.inputs(fakes({}).runnerFor), from: { understanding: doubled, facts: a.facts }, renames, offline: true });
+    const ids = preview.nodes[`journey:${SEND}`]!.children as string[];
+    expect(ids).toContain(first);
+    expect(ids).toContain(twin.id);
+    expect(diffTrees({ understanding: doubled, facts: a.facts }, { understanding: preview, facts: b.facts }, renames).journeys[0]!.stepsRemoved).not.toContain("Send the message");
+  });
+
+  it("reports a check removed when a function it cites lost an early exit", () => {
+    const withGuards = (facts: Facts, n: number): Facts => ({ ...facts, functions: facts.functions.map((f) => (f.id === "app/api/chat/route.ts#POST" ? { ...f, guards: n } : f)) });
+    const changes = diffTrees({ understanding: treeA, facts: withGuards(a.facts, 2) }, { understanding: treeA, facts: withGuards(a.facts, 1) }, new Map());
+    expect(changes.journeys[0]?.checksRemoved).toEqual(["Check the user"]);
+    const same = diffTrees({ understanding: treeA, facts: withGuards(a.facts, 2) }, { understanding: treeA, facts: withGuards(a.facts, 2) }, new Map());
+    expect(same.journeys).toEqual([]);
+  });
 });

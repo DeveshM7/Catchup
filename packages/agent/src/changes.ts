@@ -84,6 +84,8 @@ const change = (node: UnderstandingNode, what: string[] = []): NodeChange => ({ 
 
 export function diffTrees(a: Side, b: Side, renames: Map<string, string>): ChangeSet {
   const map = remapper(a.facts, b.facts, renames);
+  const guardsA = new Map(a.facts.functions.map((f) => [f.id, f.guards ?? 0]));
+  const guardsB = new Map(b.facts.functions.map((f) => [f.id, f.guards ?? 0]));
   const ua = a.understanding;
   const ub = b.understanding;
   const idsA = Object.keys(ua.nodes);
@@ -108,12 +110,18 @@ export function diffTrees(a: Side, b: Side, renames: Map<string, string>): Chang
     const fnsA = ja.anchor.functions.map((f) => map.fn(f) ?? f);
     const fnsB = jb?.anchor.functions ?? [];
     const reached = new Set(fnsB);
-    // A check is gone when its step is, when the step that took its place isn't a check, or when code it cited no longer runs.
+    // A check is gone when its step is, when the step that took its place isn't a check, when code it cited no longer
+    // runs, or when a function it cites has fewer early exits ("if not the owner → 403" deleted from a handler).
     const checksRemoved = stepsA
       .filter((s) => s.stepKind === "check")
       .filter((s) => {
         const next = stepsB.find((t) => t.id === s.id);
-        return !next || next.stepKind !== "check" || s.anchor.functions.some((f) => !reached.has(map.fn(f) ?? f));
+        return (
+          !next ||
+          next.stepKind !== "check" ||
+          s.anchor.functions.some((f) => !reached.has(map.fn(f) ?? f)) ||
+          s.anchor.functions.some((f) => (guardsA.get(f) ?? 0) > (guardsB.get(map.fn(f) ?? f) ?? 0))
+        );
       })
       .map((s) => s.title);
     const entry: JourneyChange = {

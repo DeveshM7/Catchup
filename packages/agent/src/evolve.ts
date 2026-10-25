@@ -234,13 +234,18 @@ function buildUpdatedSteps(work: Work, before: Understanding, plan: JourneyPlan,
   const journey = work.nodes[plan.id]!;
   const key = (fns: string[]): string => sorted(fns).join("\n");
   const now = (s: UnderstandingNode): string[] => s.anchor.functions.flatMap((f) => map.fn(f) ?? []);
-  const previous = new Map(plan.steps.map((s) => [key(now(s)), s]));
+  // Several steps can cite the same functions (a handler's "click" and "update the screen"): each is matched once, in order.
+  const previous = new Map<string, UnderstandingNode[]>();
+  for (const s of plan.steps) previous.set(key(now(s)), [...(previous.get(key(now(s))) ?? []), s]);
   const partOf = topPartOf(work, parts);
   // Same functions → same step. Otherwise the earlier step it overlaps most (≥ half, or the same title) keeps its id:
   // a re-cut step is a changed step, not one removed and one added (D57).
   const used = new Set<string>();
-  const exact = out.steps.map((s) => previous.get(key([...new Set(s.functions)])));
-  exact.forEach((o) => o && used.add(o.id));
+  const exact = out.steps.map((s) => {
+    const o = previous.get(key([...new Set(s.functions)]))?.find((p) => !used.has(p.id));
+    if (o) used.add(o.id);
+    return o;
+  });
   const matchOf = (s: StepsOutput["steps"][number], i: number): UnderstandingNode | undefined => {
     if (exact[i]) return exact[i];
     let best: { node: UnderstandingNode; score: number } | undefined;

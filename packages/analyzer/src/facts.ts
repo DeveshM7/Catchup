@@ -16,6 +16,8 @@ export type FunctionFact = {
   exported?: boolean;
   /** Has a `catch` (its own, not a nested function's) that never throws: a failure there is handled or hidden (D61). */
   swallows?: boolean;
+  /** Its own `if`s that leave early (return or throw): guards like "not signed in → 401". A drop is a removed check. */
+  guards?: number;
 };
 
 /** `to` is a repo-relative file path, or `pkg:<name>` for an installed package. */

@@ -188,6 +188,22 @@ function swallowsErrors(node: ts.Node): boolean {
   return found;
 }
 
+/** Counts the function's own `if` statements whose branch ends in a `return` or `throw` (early exits). */
+function guardCount(node: ts.Node): number {
+  const exits = (st: ts.Statement): boolean => {
+    const last = ts.isBlock(st) ? st.statements.at(-1) : st;
+    return last !== undefined && (ts.isReturnStatement(last) || ts.isThrowStatement(last));
+  };
+  let count = 0;
+  const visit = (n: ts.Node): void => {
+    if (n !== node && ts.isFunctionLike(n)) return;
+    if (ts.isIfStatement(n) && exits(n.thenStatement)) count += 1;
+    ts.forEachChild(n, visit);
+  };
+  visit(node);
+  return count;
+}
+
 /**
  * Named functions in a parsed file. IDs are `<path>#<qualified name>`; repeated names get `~2`, `~3`.
  * With `moduleUnit` (or in an app root), the file's top-level code is one more function, `<path>#(module)`.
@@ -205,6 +221,7 @@ export function collectFunctions(path: string, sourceFile: ts.SourceFile, module
       const count = (seen.get(qualified) ?? 0) + 1;
       seen.set(qualified, count);
       const unique = count === 1 ? qualified : `${qualified}~${count}`;
+      const guards = guardCount(node);
       found.push({
         node: node as FunctionNode,
         fact: {
@@ -215,6 +232,7 @@ export function collectFunctions(path: string, sourceFile: ts.SourceFile, module
           endLine: lineOf(node.getEnd()),
           hash: hashNode(node, sourceFile),
           ...(swallowsErrors(node) ? { swallows: true } : {}),
+          ...(guards ? { guards } : {}),
         },
       });
       ts.forEachChild(node, (child) => visit(child, [...scope, name]));

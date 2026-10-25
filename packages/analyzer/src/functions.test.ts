@@ -71,3 +71,16 @@ describe("errors caught and not re-thrown (D61)", () => {
     expect(Object.fromEntries(fns.map((f) => [f.name, f.swallows === true]))).toEqual({ hides: true, rethrows: false, outer: false, "outer.inner": true, plain: false });
   });
 });
+
+describe("guards (early exits)", () => {
+  it("counts the function's own ifs that return or throw, not other ifs or a nested function's", () => {
+    const fns = extractFunctions(
+      "x.ts",
+      [
+        "export function handler(u) { if (!u) return 401; if (u.banned) { log(u); throw new Error('no'); } if (u.a) { b(); } const f = () => { if (u.x) return; }; return f; }",
+        "export function plain() { return 1; }",
+      ].join("\n"),
+    );
+    expect(Object.fromEntries(fns.map((f) => [f.name, f.guards ?? 0]))).toEqual({ handler: 2, plain: 0, "handler.f": 1 });
+  });
+});
