@@ -56,7 +56,8 @@ export function surveyPrompt(ctx: PromptContext): string {
       "a file goes to the part with the most specific path that contains it, so you can carve a subfolder or a single file out of a broader folder. " +
       "Leftovers (config, tests, scripts) can share a part such as \"Tooling and tests\". Outside systems (databases, AI providers) are shown separately: no parts for them.",
     "- journeys: 1–3 main journeys, the things users do that the app exists for. entry: an entry point id from entries.md, exactly as written inside the backticks. " +
-      "Prefer a `ui:` entry whose tree continues into the server, so the journey runs from the browser to the server and back. title: what the user does (\"Sending a message\").",
+      "Prefer a `ui:` entry whose tree continues into the server, so the journey runs from the browser to the server and back. " +
+      "Each journey from a different family: entries in one family run mostly the same code (e.g. a CLI command and the library function it calls). Only entries that reach at least 3 functions; fewer journeys are fine. title: what the user does (\"Sending a message\").",
     `- otherFlows: for the ${OTHER_FLOWS} best-ranked families in entries.md that hold none of your journeys' entry points, one line each (at most ${WORDS.line.ask} words: what it does for the user). family: the id in backticks at the start of its heading, without the backticks.`,
   ].join("\n");
 }
@@ -146,6 +147,8 @@ export function extrasPrompt(ctx: PromptContext, summary: string, parts: Underst
   return [
     preamble(ctx),
     "Task: the notes a senior engineer gives a newcomer on day one. Check claims against the code before you make them.",
+    "Use your tools for this pass: Read the two or three files you'd send a newcomer to first, and Grep before you say something is unused or missing. " +
+      "Look for what the digests can't show: errors that are caught and ignored, work started by a file path or a string, settings that change nothing, features wired on one side only.",
     "",
     partsContext(summary, parts),
     "Main journeys:",
@@ -157,6 +160,6 @@ export function extrasPrompt(ctx: PromptContext, summary: string, parts: Underst
     "- glossary: 3–8 key ideas a reader must know to follow this codebase (term: 1–3 words; meaning: at most 30 words, what it means here).",
     "- startHere: 2–4 files to read first, best first (file: repo-relative path; why: at most 20 words).",
     "- changes: 3–6 common changes and where to make them (task: at most 10 words, \"Add a new AI tool\"; cites: the files or functions to touch).",
-    "- surprises: 0–5 things that would surprise a newcomer: half-wired features, dead ends, mismatches, duplicated logic (text: at most 35 words). Only what you verified in the code.",
+    "- surprises: 0–5 things that would surprise a newcomer: half-wired features, dead ends, mismatches, swallowed errors, duplicated logic (text: at most 35 words). Only what you verified in the code; \"Possibly unused\" in hot.md lists candidates for dead code.",
   ].join("\n");
 }

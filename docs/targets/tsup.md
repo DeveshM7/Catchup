@@ -90,7 +90,7 @@ _Variant:_ **`tsup-node`** is the same flow with every `node_modules` import lef
 - **A failed dts build reports both "error" and "success".** `runRollup` catches its own error and `handleError` posts `"error"` from the worker; `startRollup` then posts `"success"` too. The main thread happens to act on the first message.
 - **Terser failures don't fail the build.** `terserPlugin`'s `renderChunk` logs the error and returns the unminified code.
 - **CJS splitting and old targets are two-pass.** With `splitting` on a cjs build (or `treeshake`), esbuild emits ESM and the chunk is converted afterwards (sucrase in `cjsSplitting`, Rollup in `treeShakingPlugin`). Targets `es5`/`es3` build as `es2020` and are lowered by swc in `swcTarget`.
-- **Dead code.** `src/run.ts#runCode` and `src/utils.ts#isExternal` are exported but nothing calls them.
+- **Dead code.** `src/run.ts#runCode`, `src/utils.ts#isExternal`, `#pathExists` and `#trimDtsExtension` are exported but nothing in `src/` or `test/` calls them.
 
 ---
 

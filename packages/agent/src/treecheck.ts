@@ -93,10 +93,11 @@ export function checkSteps(output: StepsOutput, rules: StepRules): string[] {
       if (!cited.has(fn)) fresh.push(rules.order.get(fn) ?? 0);
     }
     for (const fn of step.functions) cited.add(fn);
+    // Out of order only when all of a main step's new code runs before the previous step starts: a step may cite setup
+    // that is called early but does its work late (a plugin built before the build that runs it) (D54).
     if (step.kind === "main" && fresh.length) {
-      const start = Math.min(...fresh);
-      if (start < lastStart) problems.push(`${where} starts with code that runs before "${lastTitle}"; order the main steps as the code runs`);
-      lastStart = start;
+      if (Math.max(...fresh) < lastStart) problems.push(`${where} runs entirely before "${lastTitle}"; order the main steps as the code runs`);
+      lastStart = Math.min(...fresh);
       lastTitle = step.title;
     }
   });

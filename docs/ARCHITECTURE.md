@@ -109,7 +109,7 @@ Plus per family: score, members, systems. Signals rank; they never hide anything
 
 ## 5. Digests (deterministic, Build 2)
 
-Facts JSON is too big to read. Before the agent runs, code writes markdown into `.catchup/digest/<sha>/` (`buildDigest`, D46): `repo.md` (README excerpt, package.json, folder tree with file counts, D19 components, systems), `entries.md` (every entry point grouped by flow family, best first, with handler, size, systems), `hot.md` (top functions/files by signals with reasons), `files.md` (every source file with lines, functions, side, flows), and one `flow-<slug>-<hash>.md` per main-journey candidate (top 6 family representatives: rendered tree + key snippets). Rendered trees fold repeated siblings and put a parent's calls to one outside system on one line. The pass prompts carry the digests they need inline (fewer tool calls); the rest are listed for the agent to Read.
+Facts JSON is too big to read. Before the agent runs, code writes markdown into `.catchup/digest/<sha>/` (`buildDigest`, D46): `repo.md` (README excerpt, package.json, folder tree with file counts, D19 components, systems), `entries.md` (every entry point grouped by flow family, best first, with handler, size, systems), `hot.md` (top functions/files by signals with reasons, plus "possibly unused" exports: no caller, no entry point, lone ones first, D54), `files.md` (every source file with lines, functions, side, flows), and one `flow-<slug>-<hash>.md` per main-journey candidate (top 6 family representatives: rendered tree + key snippets). Rendered trees fold repeated siblings and put a parent's calls to one outside system on one line. The pass prompts carry the digests they need inline (fewer tool calls); the rest are listed for the agent to Read.
 
 ## 6. Understand (Claude agent, Build 2)
 
@@ -164,7 +164,8 @@ Checked before anything is stored; one retry with the problems listed; then fail
 - Every cited file / function / entry point exists; step functions are in that journey's tree (sub-steps: in the step's subtrees). Journeys can't be pages.
 - A child's anchor lies inside its parent's; children of a part split its files exactly. Claude gives folders or files; each file goes to the child with the most specific path that holds it, and the validator lists files left over, paths given twice and children left empty. Paths that match no source file (tests, styles) are ignored (D47).
 - Limits: 2–7 top parts and children, 1–3 journeys, 3–7 steps (2–7 sub-steps); ≤ 5 Claude-written levels; nodes with < 3 files/functions are leaves.
-- Main steps follow the call-tree order (each step's first new function runs no earlier than the previous step's); the first step includes the entry handler; key functions are covered by some step: the handler, AI tools, requests to the server (the requests one function makes form a group: any one is enough, D47) and the browser functions that receive messages.
+- Journeys come from different flow families and reach at least 3 functions (D54).
+- Main steps follow the call-tree order (a main step is out of order only when all of its new functions run before the previous step's first one, D54); the first step includes the entry handler; key functions are covered by some step: the handler, AI tools, requests to the server (the requests one function makes form a group: any one is enough, D47) and the browser functions that receive messages.
 - One line for each of the top 20 other flow families, no more, no less.
 - Extras: every cite is a file path or function ID.
 - Word caps per field, with slack (D34): title 5 (≤ 8), short 12 (≤ 15), long 60 (≤ 75), summary 25 (≤ 32).

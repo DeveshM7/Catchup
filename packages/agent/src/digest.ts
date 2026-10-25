@@ -144,7 +144,39 @@ function hotDigest(inputs: DigestInputs): string {
     .sort(([a, x], [b, y]) => y.flows - x.flows || y.churn - x.churn || (a < b ? -1 : 1))
     .slice(0, HOT_FILES)
     .map(([path, s]) => `- ${path} — ${reasons(s)}, ${s.churn} commits${s.lastChanged ? `, last ${s.lastChanged.slice(0, 10)}` : ""}${s.side ? `, ${s.side}` : ""}`);
-  return ["# Hot spots", "", "Ranked by code signals: how many flows reach it, how many callers, outside systems.", "", "## Functions", ...functions, "", "## Files", ...files].join("\n");
+  const unused = unusedExports(inputs);
+  return [
+    "# Hot spots",
+    "",
+    "Ranked by code signals: how many flows reach it, how many callers, outside systems.",
+    "",
+    "## Functions",
+    ...functions,
+    "",
+    "## Files",
+    ...files,
+    "",
+    "## Possibly unused",
+    "Exported, but nothing in the source calls, renders or passes them, and no entry point starts them. Tests, dynamic imports or other packages may still use them: check (Grep) before calling them dead.",
+    ...(unused.length ? unused.map((id) => `- [${id}]`) : ["(none)"]),
+  ].join("\n");
+}
+
+const MAX_UNUSED = 15;
+
+/** Exported top-level functions with no caller in the facts and no entry point (D54): candidates for dead code. */
+export function unusedExports(inputs: Pick<DigestInputs, "facts" | "signals">): string[] {
+  const entries = new Set(inputs.facts.entryPoints.map((e) => e.handler));
+  const unused = inputs.facts.functions
+    .filter((fn) => fn.exported && !fn.name.includes(".") && fn.name !== "default" && !entries.has(fn.id))
+    .filter((fn) => (inputs.signals.functions[fn.id]?.fanIn ?? 0) === 0 && (inputs.signals.functions[fn.id]?.flows ?? 0) === 0);
+  const perFile = new Map<string, number>();
+  for (const fn of unused) perFile.set(fn.file, (perFile.get(fn.file) ?? 0) + 1);
+  // A lone unused export says more than one of many in a component kit: fewest per file first.
+  return unused
+    .sort((a, b) => perFile.get(a.file)! - perFile.get(b.file)! || (a.id < b.id ? -1 : 1))
+    .map((fn) => fn.id)
+    .slice(0, MAX_UNUSED);
 }
 
 function filesDigest(inputs: DigestInputs): string {

@@ -78,11 +78,15 @@ describe("checkSteps", () => {
     expect(checkSteps({ steps: [step("Start", ["h", "a"]), step("Checks", ["b"], "check"), step("Tool", ["t2", "c"])] }, rules)).toEqual([]);
   });
 
+  it("accepts a step that cites early setup along with later work", () => {
+    expect(checkSteps({ steps: [step("Start", ["h"]), step("Run", ["c", "t1"]), step("Report", ["b", "t2"])] }, rules)).toEqual([]);
+  });
+
   it("rejects unknown functions, a missing handler, wrong order and uncovered key functions", () => {
     const problems = checkSteps({ steps: [step("One", ["a", "x"]), step("Two", ["c"]), step("Three", ["b"])] }, rules);
     expect(problems).toContain(`step 1 ("One") cites "x", which is not a function in this journey's call tree`);
     expect(problems).toContain("the first step must include the entry handler h");
-    expect(problems).toContain(`step 3 ("Three") starts with code that runs before "Two"; order the main steps as the code runs`);
+    expect(problems).toContain(`step 3 ("Three") runs entirely before "Two"; order the main steps as the code runs`);
     expect(problems).toContain("these key functions are in no step: h, t1 or t2");
   });
 });

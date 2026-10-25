@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { analyze, buildCallTrees, computeSignals } from "@catchup/analyzer";
-import { buildDigest } from "./digest.js";
+import { buildDigest, unusedExports } from "./digest.js";
 import type { Runner } from "./droid.js";
 import type { ChildrenOutput, ExtrasOutput, StepsOutput, SurveyOutput, Understanding } from "./tree.js";
 import { keyFunctionGroups } from "./journey.js";
@@ -166,6 +166,27 @@ describe("understand on fixtures/tiny-web (fake Claude)", async () => {
     const kept = await understand(base(rerun.runnerFor, opened.understanding));
     expect(rerun.calls).toEqual([]);
     expect(JSON.stringify(kept.understanding)).toBe(JSON.stringify(opened.understanding));
+  });
+
+  it("rejects two journeys from one flow family (D54)", async () => {
+    const twice = { ...survey, journeys: [...survey.journeys, { entry: "http:POST /api/chat", title: "Posting a chat", short: "s", long: "l" }] };
+    await expect(understand(base(fakes({ survey: [twice] }).runnerFor))).rejects.toThrow(/"Sending a message" and "Posting a chat" run mostly the same code/);
+  });
+
+  it("lists exported functions nothing calls as possibly unused, never entry points (D54)", () => {
+    expect(unusedExports({ facts, signals })).toEqual([]);
+    expect(digest.files["hot.md"]).toContain("## Possibly unused\n");
+    const fn = (id: string, exported = true) => ({ id, file: id.split("#")[0]!, name: id.split("#")[1]!, startLine: 1, endLine: 2, hash: "h", exported });
+    const kit = ["kit.tsx#A", "kit.tsx#B", "kit.tsx#C"];
+    const handmade = {
+      ...facts,
+      functions: [fn("run.ts#runCode"), fn("cli.ts#main"), fn("used.ts#helper"), fn("local.ts#inner", false), fn("cls.ts#Pool.add"), ...kit.map((id) => fn(id))],
+      entryPoints: [{ id: "cli:$ x", kind: "cli" as const, label: "$ x", handler: "cli.ts#main", file: "cli.ts" }],
+    };
+    const quiet = { flows: 0, systems: [], fanIn: 0, exported: true, loc: 2, readme: false };
+    const sig = { ...signals, functions: Object.fromEntries(handmade.functions.map((f) => [f.id, f.id === "used.ts#helper" ? { ...quiet, fanIn: 2 } : quiet])) };
+    // Lone unused exports first, then the kit; entry handlers, called, local and member functions never.
+    expect(unusedExports({ facts: handmade, signals: sig })).toEqual(["run.ts#runCode", ...kit]);
   });
 
   it("rejects steps that cite functions outside the journey", async () => {

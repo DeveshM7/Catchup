@@ -146,9 +146,22 @@ function checkSurvey(work: Work, out: SurveyOutput): string[] {
     const tree = work.trees.get(j.entry);
     if (!tree) problems.push(`journey "${j.title}": "${j.entry}" is not an entry point id from entries.md`);
     else if (tree.entryPoint.kind === "page") problems.push(`journey "${j.title}": "${j.entry}" is a page (a screen), not something a user does`);
+    else if (tree.functionCount < MIN_TO_SPLIT) {
+      problems.push(`journey "${j.title}": "${j.entry}" runs only ${tree.functionCount} function(s), too little to tell as steps; give it a line in otherFlows instead`);
+    }
     if (entries.has(j.entry)) problems.push(`journey entry "${j.entry}" is used twice`);
     entries.add(j.entry);
     problems.push(...checkWords(`journey "${j.title}"`, { title: j.title, short: j.short, long: j.long }));
+  }
+  // Entry points in one flow family run mostly the same code: two of them would tell one story twice (D54).
+  const familyOf = new Map(work.inputs.signals.families.flatMap((f) => f.members.map((m) => [m, f.id] as const)));
+  const firstIn = new Map<string, string>();
+  for (const j of out.journeys) {
+    const family = familyOf.get(j.entry);
+    if (family === undefined) continue;
+    const other = firstIn.get(family);
+    if (other !== undefined) problems.push(`journeys "${other}" and "${j.title}" run mostly the same code (both in family ${family}); pick each journey from a different family`);
+    else firstIn.set(family, j.title);
   }
 
   const wanted = otherFamilies(work, [...entries]).map((f) => f.id);
