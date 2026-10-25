@@ -30,6 +30,16 @@ export function droidRunner(options: DroidRunnerOptions): Runner {
   };
 }
 
+/** The Claude run itself failed twice (API error, billing, network, cap): not a validation problem. */
+export class RunError extends Error {
+  constructor(
+    readonly job: string,
+    readonly reason: string,
+  ) {
+    super(`${job}: the Claude run failed twice: ${reason}`);
+  }
+}
+
 export class ExplainError extends Error {
   constructor(
     readonly job: string,
@@ -51,8 +61,8 @@ export type AskOptions<T> = {
   onRejected?: (job: string, problems: string[]) => void;
 };
 
-function problemsOf<T>(result: RunResult, options: AskOptions<T>): { value?: T; problems: string[] } {
-  if (!result.ok) return { problems: [result.error] };
+function problemsOf<T>(result: RunResult, options: AskOptions<T>): { value?: T; problems: string[]; runFailed?: true } {
+  if (!result.ok) return { problems: [result.error], runFailed: true };
   const parsed = options.schema.safeParse(result.value);
   if (!parsed.success) return { problems: parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`) };
   return { value: parsed.data, problems: options.check(parsed.data) };
@@ -65,7 +75,8 @@ export async function askStructured<T>(options: AskOptions<T>): Promise<T> {
   const first = problemsOf(await options.runner(options.prompt, schema), options);
   if (first.value !== undefined && first.problems.length === 0) return first.value;
   options.onRejected?.(options.job, first.problems);
-  const retryPrompt = [
+  // A failed run (API error, cap) is retried as it was; a rejected answer is retried with the problems listed.
+  const retryPrompt = first.runFailed ? options.prompt : [
     options.prompt,
     "",
     "Your previous answer was rejected by the validator:",
@@ -77,5 +88,6 @@ export async function askStructured<T>(options: AskOptions<T>): Promise<T> {
   options.onCall?.(options.job, 2);
   const second = problemsOf(await options.runner(retryPrompt, schema), options);
   if (second.value !== undefined && second.problems.length === 0) return second.value;
+  if (second.runFailed) throw new RunError(options.job, second.problems[0] ?? "unknown error");
   throw new ExplainError(options.job, second.problems);
 }

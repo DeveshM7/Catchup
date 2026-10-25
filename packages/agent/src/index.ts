@@ -1,5 +1,5 @@
 export * from "./schemas.js";
-export { askStructured, DEFAULT_MODEL, droidRunner, ExplainError, type Runner, type RunResult } from "./droid.js";
+export { askStructured, DEFAULT_MODEL, droidRunner, ExplainError, RunError, type Runner, type RunResult } from "./droid.js";
 export { explainSnapshot, type ExplainInputs, type ExplainStats } from "./explain.js";
 export { selectTopFlows } from "./rank.js";
 export { anthropicRunner, anthropicSession, apiSchema, providerFrom, READ_TOOL_DEFS, runReadTool, type CreateMessage, type Provider } from "./anthropic.js";

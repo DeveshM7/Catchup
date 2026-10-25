@@ -35,4 +35,12 @@ describe("askStructured", () => {
     await expect(askStructured({ job: "t", prompt: "p", schema, check, runner })).rejects.toThrow(ExplainError);
     await expect(askStructured({ job: "t", prompt: "p", schema, check, runner: fake([{}, {}]).runner })).rejects.toThrow(/n: /);
   });
+
+  it("retries a failed run with the same prompt and reports it as a run failure, not a validation one", async () => {
+    const prompts: string[] = [];
+    const runner = async (prompt: string) => (prompts.push(prompt), { ok: false as const, error: "400 credit balance is too low" });
+    await expect(askStructured({ job: "j", prompt: "P", schema: z.object({ a: z.string() }), check: () => [], runner })).rejects.toThrow("j: the Claude run failed twice: 400 credit balance is too low");
+    expect(prompts).toEqual(["P", "P"]);
+  });
 });
+

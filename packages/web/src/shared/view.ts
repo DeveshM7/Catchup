@@ -143,9 +143,12 @@ export type Scope = { files: Set<string>; systems: Set<string>; nodes?: Set<stri
 export function answerScope(reply: AskReply, data: TreeData): Scope {
   const nodes = reply.nodes.flatMap((id) => data.nodes[id] ?? []);
   const steps = nodes.flatMap((n) => (n.kind === "journey" && Array.isArray(n.children) ? n.children : []));
+  // Systems a cited file or function's file calls directly light up too (an upload route → Blob storage).
+  const pointed = [...reply.files, ...reply.functions.map(fileOf)];
+  const called = pointed.flatMap((f) => (data.files[f]?.systems ?? []).map((name) => `system:${name}`));
   return {
-    files: new Set([...reply.files, ...reply.functions.map(fileOf), ...nodes.flatMap((n) => n.files)]),
-    systems: new Set(nodes.filter((n) => n.kind === "system").map((n) => n.id)),
+    files: new Set([...pointed, ...nodes.flatMap((n) => n.files)]),
+    systems: new Set([...nodes.filter((n) => n.kind === "system").map((n) => n.id), ...called]),
     nodes: new Set([...reply.nodes, ...steps]),
   };
 }

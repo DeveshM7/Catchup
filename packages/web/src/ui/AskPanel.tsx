@@ -68,7 +68,7 @@ function Cites({ reply, data, mode, onSelect }: { reply: AskReply; data: TreeDat
         <button key={id} className="chip link mono" onClick={() => onSelect({ kind: "fn", id })}>{data.refs[id]?.name ?? id}()</button>
       ))}
       {reply.files.map((path) => (
-        <button key={path} className="chip link mono" onClick={() => onSelect({ kind: "file", path })} title={path}>{path.split("/").pop()}</button>
+        <button key={path} className="chip link mono" onClick={() => onSelect({ kind: "file", path })} title={path}>{path.split("/").slice(-2).join("/")}</button>
       ))}
     </div>
   );

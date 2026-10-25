@@ -64,7 +64,7 @@ _The live checklist. Tick boxes as you go. Each phase / build has a "done when" 
 
 # Roadmap (D35)
 
-Three parts, each finished before the next. Every build ends with its "done when" check, tests, typecheck, lint, and a Progress log line. **Current: Build 5.** Build 4 closed early by the user (D55).
+Three parts, each finished before the next. Every build ends with its "done when" check, tests, typecheck, lint, and a Progress log line. **Current: Build 6.** Build 4 closed early by the user (D55).
 
 ## Part 1 — Understand
 
@@ -123,7 +123,7 @@ Three parts, each finished before the next. Every build ends with its "done when
 
 - [x] Read-only Ask session (shared permission handler), brief from the selected node
 - [x] Answers cite nodes/functions/files; citation check; one retry
-- [x] General chat + "Ask" on any box; cited nodes highlighted, cited journeys animated (built; highlighting not yet seen live, credits ran out)
+- [x] General chat + "Ask" on any box; cited nodes highlighted, cited journeys animated
 - [x] Show the agent's steps (tool calls) in the UI
 
 **Done when:** five questions per demo repo get correct, cited answers with the right boxes highlighted.
@@ -206,3 +206,4 @@ _One line per session: date, what got done, what's next, anything surprising._
 - 2026-10-25 — D54 (journeys from different families with ≥ 3 functions, lenient step order, possibly-unused exports in `hot.md`, extras told to read code). tsup live run: 9 calls, no retries, 35 s. Against the target: summary ✓, 6 parts by role ✓ (declarations part now holds `rollup.ts`/`tsc.ts`/`api-extractor.ts`/`ts-resolve.ts`), one main journey ✓ (command → options check → esbuild → output plugins → dts branch → watch branch), defineConfig as an other flow ✓, start-here ✓ (`index.ts`, `esbuild/index.ts`, `cli-main.ts`, `plugin.ts`), changes ✓; glossary partial (no config file / externals); surprises 2 of 5 (deprecation; 3 of 4 dead exports, hedged), with 1 tool call in the whole run; `run.ts` described as "Run after build" though nothing calls it. Next: make the extras pass actually read code, check the dashboard on tsup and Umami.
 - 2026-10-25 — Build 4 closed by user choice (D55) with known gaps: surprises 2 of 5 on tsup (the extras agent barely reads code), glossary misses config files and externals, dashboard on tsup and Umami not checked by eye. Next: Build 5 (Ask).
 - 2026-10-25 — Build 5 built (D56): `agent/src/ask.ts` (map + selected box + last 3 turns → read-only agent → `{answer, cites}`; cites must be box ids, function ids or files, decoration stripped; one retry), live tool steps via `agentRunner`'s `onTool`, `POST /api/ask` streaming NDJSON, `catchup ask <path> "<q>" [--node id]`, Ask panel (chat, "Ask about this" on any box, cite chips, answer lights its files/systems/boxes, cited journey steps pulse in order). Live: two CLI/curl answers on ai-chatbot correct and grounded (rate limits: 7 tool calls, 22 s, got "limits identical" right; createDocument hand-off: 3 tool calls). Headless Chrome caught a crash (an effect returning `scrollIntoView`'s Promise) and Claude copying `[id]` brackets into cites; both fixed. Then the Anthropic credit ran out mid-check, so the "five questions with the right boxes lit" check is not done. 179 tests, typecheck, lint pass.
+- 2026-10-25 — Build 5 done. Back on Droid (provider switch, D51). Run failures (API errors, billing) are now retried as-is and reported as `RunError`, not as validation failures. Check in headless Chrome on ai-chatbot, five questions through the Ask panel: artifact streaming to the side panel, resuming a dropped stream (found it's a stub: `GET …/stream` returns 204), where the reply is saved and what happens on failure (on the Flows view: "Save the reply" pulses), who can read a private chat (owner only), uploads (Vercel Blob, JPEG/PNG ≤ 5 MB). All five correct against `docs/targets/ai-chatbot.md`, 11–23 s, 2–8 files read each, every cite resolved, the right boxes lit. Fixes from the check: the canvas shrinks beside the Ask panel; cited files light the systems they call (upload → Blob storage); file chips show their folder. Next: Build 6.

@@ -261,6 +261,7 @@ button.where { margin-left: 0; }
 /* Ask (Build 5) */
 .ask { position: absolute; top: 0; right: 0; bottom: 0; width: 420px; z-index: 11; background: var(--surface); border-left: 1px solid var(--line); display: flex; flex-direction: column; box-shadow: -8px 0 24px rgba(20,30,40,.06); animation: slide-in .18s ease-out; }
 .app.asking .detail { right: 420px; }
+.app.asking .main { margin-right: 420px; }
 .ask .panel-bar { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .ask-turns { flex: 1; overflow-y: auto; padding: 12px 20px; display: flex; flex-direction: column; gap: 16px; }
 .ask-empty { font-size: 13px; }
