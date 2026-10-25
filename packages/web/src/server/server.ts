@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import type { Understanding } from "@catchup/agent";
 import { createServer, type Plugin, type ViteDevServer } from "vite";
-import type { AskEvent, AskRequest, AskStep, ChangeContextView, ChangeSetView, MapGraph, PreviewView, SourceView, TimelapseView, TreeData } from "../shared/types.js";
+import type { AskEvent, AskRequest, AskStep, ChangeSetView, MapGraph, PreviewView, SourceView, TimelapseView, TreeData } from "../shared/types.js";
 import { commitsBetween } from "@catchup/history";
 import { listTimelapses, loadChanges, loadTimelapse } from "@catchup/store";
 import { Preview, type PreviewResult } from "./preview.js";
-import { buildMap, callsOf, treeView, type DashboardInputs } from "./data.js";
+import { buildMap, callsOf, treeView, type AskContext, type DashboardInputs } from "./data.js";
 import { canvasGraph, treeData } from "./understanding.js";
 
 const UI_ROOT = fileURLToPath(new URL("../ui", import.meta.url));
@@ -128,12 +128,17 @@ export function parseAsk(body: string): AskRequest {
 }
 
 /** The change a question is about (Build 8): the live preview's, or a stored change set and its commits. */
-function changeContext(inputs: DashboardInputs, preview: Preview | undefined, changes: AskRequest["changes"]): ChangeContextView | undefined {
+function changeContext(inputs: DashboardInputs, preview: Preview | undefined, changes: AskRequest["changes"]): AskContext | undefined {
   if (changes === undefined) return undefined;
   if (changes === "preview") {
-    const set = preview?.current().result?.changes;
-    if (!set) throw new Error("the live preview has no result yet");
-    return { label: `uncommitted changes (working tree against HEAD ${inputs.facts.sha.slice(0, 7)})`, changes: set, commits: [] };
+    const result = preview?.current().result;
+    if (!result) throw new Error("the live preview has no result yet");
+    return {
+      label: `uncommitted changes (working tree against HEAD ${inputs.facts.sha.slice(0, 7)})`,
+      changes: result.changes,
+      commits: [],
+      after: { facts: result.facts, understanding: result.understanding },
+    };
   }
   const set = loadChanges<ChangeSetView>(inputs.repoRoot, changes.from, changes.to);
   if (!set) throw new Error(`no change set ${changes.from.slice(0, 9)}..${changes.to.slice(0, 9)}; run: catchup diff <path> ${changes.from.slice(0, 9)} ${changes.to.slice(0, 9)}`);
@@ -182,6 +187,12 @@ class PreviewApi {
     private readonly preview: Preview | undefined,
   ) {}
 
+  /** The dashboard inputs with the working tree's analysis in place of HEAD's (for `?preview=1` source and call trees). */
+  code(): DashboardInputs | undefined {
+    const r = this.preview?.current().result;
+    return r ? { ...this.inputs, facts: r.facts, snapshot: r.snapshot, trees: r.trees, signals: r.signals } : undefined;
+  }
+
   private inputsOf(r: PreviewResult): Parameters<typeof treeData>[0] {
     return { repoRoot: this.inputs.repoRoot, facts: r.facts, snapshot: r.snapshot, signals: r.signals, understanding: r.understanding };
   }
@@ -204,7 +215,7 @@ class PreviewApi {
     if (!r) return Promise.resolve(undefined);
     const cache = this.canvases.get(r) ?? new Map<string, Promise<MapGraph | undefined>>();
     this.canvases.set(r, cache);
-    const hit = cache.get(id) ?? canvasGraph(this.inputsOf(r), id);
+    const hit = cache.get(id) ?? canvasGraph(this.inputsOf(r), id, { filesWhenUnopened: true });
     cache.set(id, hit);
     return hit;
   }
@@ -247,18 +258,20 @@ function apiPlugin(inputs: DashboardInputs, preview: Preview | undefined): Plugi
         if (url.pathname === "/api/preview/canvas") return reply(res, previewApi.canvas(param("id")), "no preview canvas for this node");
         if (url.pathname === "/api/canvas") return reply(res, state.canvas(param("id")), "no canvas for this node");
         if (url.pathname === "/api/map") return reply(res, map, "no map");
+        // From the Preview tab, source and call trees come from the working tree.
+        const code = (param("preview") && previewApi.code()) || inputs;
         if (url.pathname === "/api/calls") {
           const fn = param("fn");
           const entry = param("entry");
           if (fn) {
-            const view = callsOf(inputs, fn, entry || undefined);
+            const view = callsOf(code, fn, entry || undefined);
             return view ? send(res, 200, view) : send(res, 404, { error: "no call tree reaches this function" });
           }
-          const tree = trees.get(entry);
-          return tree ? send(res, 200, treeView(tree, inputs.facts, inputs.snapshot)) : send(res, 404, { error: "no such entry point" });
+          const tree = code === inputs ? trees.get(entry) : code.trees.find((t) => t.entryPoint.id === entry);
+          return tree ? send(res, 200, treeView(tree, code.facts, code.snapshot)) : send(res, 404, { error: "no such entry point" });
         }
         if (url.pathname === "/api/source") {
-          const source = sourceOf(inputs, param("fn"));
+          const source = sourceOf(code, param("fn"));
           return source ? send(res, 200, source) : send(res, 404, { error: "no such function" });
         }
         send(res, 404, { error: "unknown endpoint" });

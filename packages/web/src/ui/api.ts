@@ -22,6 +22,14 @@ const calls = new Map<string, Promise<TreeView>>();
 const sources = new Map<string, Promise<SourceView>>();
 const q = encodeURIComponent;
 
+/** On the Preview tab, panels read the working tree's code (call trees, source), not HEAD's; it changes on every save, so it isn't cached. */
+let workingTree = false;
+export function setWorkingTree(on: boolean): void {
+  workingTree = on;
+}
+const fromCode = <T>(cache: Map<string, Promise<T>>, key: string, path: string): Promise<T> =>
+  workingTree ? request(`${path}&preview=1`) : cached(cache, key, () => request(path));
+
 export const api = {
   understanding: (): Promise<TreeData> => request("/api/understanding"),
   canvas: (id: string): Promise<MapGraph> => cached(canvases, id, () => request(`/api/canvas?id=${q(id)}`)),
@@ -31,10 +39,9 @@ export const api = {
     canvases.clear();
     return data;
   },
-  entryCalls: (entry: string): Promise<TreeView> => cached(calls, `entry:${entry}`, () => request(`/api/calls?entry=${q(entry)}`)),
-  fnCalls: (fn: string, entry?: string): Promise<TreeView> =>
-    cached(calls, `fn:${fn}:${entry ?? ""}`, () => request(`/api/calls?fn=${q(fn)}${entry ? `&entry=${q(entry)}` : ""}`)),
-  source: (fn: string): Promise<SourceView> => cached(sources, fn, () => request(`/api/source?fn=${q(fn)}`)),
+  entryCalls: (entry: string): Promise<TreeView> => fromCode(calls, `entry:${entry}`, `/api/calls?entry=${q(entry)}`),
+  fnCalls: (fn: string, entry?: string): Promise<TreeView> => fromCode(calls, `fn:${fn}:${entry ?? ""}`, `/api/calls?fn=${q(fn)}${entry ? `&entry=${q(entry)}` : ""}`),
+  source: (fn: string): Promise<SourceView> => fromCode(sources, fn, `/api/source?fn=${q(fn)}`),
   map: (): Promise<MapData> => request("/api/map"),
   /** Stored timelapses (Build 9), oldest file name first. */
   timelapses: (): Promise<{ from: string; to: string }[]> => request("/api/timelapses"),

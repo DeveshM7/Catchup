@@ -58,7 +58,7 @@ function List({ items, render }: { items: string[]; render?: (item: string) => R
 }
 
 /** What a change does to one journey, in the words a reviewer cares about (behavior first). */
-function JourneyCard({ j }: { j: JourneyChangeView }) {
+function JourneyCard({ j, onAsk }: { j: JourneyChangeView; onAsk: (text: string) => void }) {
   const facts: { tone: string; text: ReactNode }[] = [
     ...j.systemsAdded.map((s) => ({ tone: "add", text: <>now uses <strong>{s}</strong></> })),
     ...j.systemsRemoved.map((s) => ({ tone: "remove", text: <>no longer uses <strong>{s}</strong></> })),
@@ -68,7 +68,10 @@ function JourneyCard({ j }: { j: JourneyChangeView }) {
   ];
   return (
     <section className="card change-card">
-      <h3>{j.title}</h3>
+      <div className="card-head">
+        <h3>{j.title}</h3>
+        <button className="ghost small" onClick={() => onAsk(journeyQuestion(j))}>Ask about this</button>
+      </div>
       <ul className="facts">
         {facts.map((f, i) => (
           <li key={i} className={f.tone}>{f.text}</li>
@@ -90,16 +93,32 @@ function JourneyCard({ j }: { j: JourneyChangeView }) {
   );
 }
 
+/** The question an "Ask about this" on a journey card starts with. */
+function journeyQuestion(j: JourneyChangeView): string {
+  const check = j.checksRemoved[0];
+  if (check) return `In "${j.title}", the check "${check}" looks removed. What exactly was dropped, and what can a user do now that they couldn't before?`;
+  const system = j.systemsAdded[0];
+  if (system) return `"${j.title}" now uses ${system}. What does it do with it, and what happens if ${system} is down?`;
+  return `What do these changes do to "${j.title}"?`;
+}
+
 function ago(iso: string | null, now: number): string {
   if (!iso) return "not yet";
   const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));
   return s < 60 ? `${s} s ago` : `${Math.round(s / 60)} min ago`;
 }
 
-type Props = { view: PreviewView | null; mode: Familiarity; onSelect: (sel: Selection | null) => void };
+type Props = {
+  view: PreviewView | null;
+  mode: Familiarity;
+  selected: string | null;
+  onSelect: (sel: Selection | null) => void;
+  /** Opens Ask about the uncommitted changes, optionally with a question in the box. */
+  onAsk: (text?: string) => void;
+};
 
 /** Uncommitted changes as they will land (Build 7): behavior first, then the parts touched, then every file and box. */
-export function PreviewPage({ view, mode, onSelect }: Props) {
+export function PreviewPage({ view, mode, selected, onSelect, onAsk }: Props) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
@@ -117,15 +136,35 @@ export function PreviewPage({ view, mode, onSelect }: Props) {
           Uncommitted changes · against HEAD {view.head.slice(0, 7)} · {view.status === "analyzing" ? <><span className="spinner" /> analyzing…</> : <>updated {ago(view.updatedAt, now)} (took {(view.durationMs / 1000).toFixed(1)} s)</>}
         </div>
         <h1>What your changes do</h1>
+        {!empty && (
+          <div className="hero-actions">
+            <button className="primary" onClick={() => onAsk()}>Ask about these changes</button>
+          </div>
+        )}
         {view.error && <p className="ask-error">Could not analyze the working tree: {view.error}</p>}
         {empty && !view.error && <p className="lead">No changes to the code since HEAD. Save a file and this page updates within a few seconds.</p>}
       </header>
-      {c && !empty && tree && <Changes c={c} tree={tree} mode={mode} version={view.updatedAt ?? ""} onSelect={onSelect} />}
+      {c && !empty && tree && <Changes c={c} tree={tree} mode={mode} version={view.updatedAt ?? ""} selected={selected} onSelect={onSelect} onAsk={onAsk} />}
     </div>
   );
 }
 
-function Changes({ c, tree, mode, version, onSelect }: { c: ChangeSetView; tree: TreeData; mode: Familiarity; version: string; onSelect: (sel: Selection | null) => void }) {
+type ChangesProps = Omit<Props, "view"> & { c: ChangeSetView; tree: TreeData; version: string };
+
+function Changes({ c, tree, mode, version, selected, onSelect, onAsk }: ChangesProps) {
+  // The canvas opens like Architecture's (parts → sub-parts → files), inside the preview's own tree.
+  const [path, setPath] = useState<string[]>([]);
+  const trail = path.filter((id) => tree.nodes[id]);
+  const level = trail.at(-1) ?? "root";
+  const pick = (box: string | null): void => {
+    if (!box) return onSelect(null);
+    if (box.startsWith("file:")) return onSelect({ kind: "file", path: box.slice("file:".length) });
+    onSelect(tree.nodes[box] ? { kind: "node", id: box } : null);
+  };
+  const openBox = (id: string): void => {
+    const node = tree.nodes[id];
+    if (node?.kind === "part") setPath([...trail, id]);
+  };
   const touchedFiles = new Set([...c.files.added, ...c.files.changed, ...c.files.renamed.map((r) => r.to)]);
   const added = new Set(c.nodes.added.map((n) => n.id));
   const changed = new Set(c.nodes.changed.map((n) => n.id));
@@ -141,7 +180,7 @@ function Changes({ c, tree, mode, version, onSelect }: { c: ChangeSetView; tree:
       {c.journeys.length > 0 && (
         <div className="change-grid">
           {c.journeys.map((j) => (
-            <JourneyCard key={j.id} j={j} />
+            <JourneyCard key={j.id} j={j} onAsk={onAsk} />
           ))}
         </div>
       )}
@@ -160,18 +199,26 @@ function Changes({ c, tree, mode, version, onSelect }: { c: ChangeSetView; tree:
         <div className="card-head">
           <div>
             <h2>Where it lands</h2>
-            <p className="muted">Parts holding changed files are marked; new boxes say so.</p>
+            <p className="muted">Parts holding changed files are marked; new boxes say so. Click a box for details, ▸ to go inside.</p>
           </div>
+        </div>
+        <div className="crumbs preview-crumbs">
+          {["root", ...trail].map((id, i) => (
+            <span key={id} className="crumb-wrap">
+              {i > 0 && <span className="sep">/</span>}
+              <button className={`crumb ${i === trail.length ? "last" : ""}`} onClick={() => setPath(trail.slice(0, i))}>{id === "root" ? "All parts" : tree.nodes[id]!.title}</button>
+            </span>
+          ))}
         </div>
         <div className="parts-canvas" onClick={() => onSelect(null)}>
           <ArchCanvas
-            id="root"
+            id={level}
             data={tree}
             mode={mode}
             scope={scope}
-            selected={null}
-            onSelect={() => undefined}
-            onOpen={() => undefined}
+            selected={selected}
+            onSelect={pick}
+            onOpen={openBox}
             load={(id) => api.previewCanvas(id, version)}
             statusOf={statusOf}
           />

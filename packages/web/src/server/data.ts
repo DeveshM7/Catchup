@@ -16,8 +16,11 @@ export type DashboardInputs = {
   /** Runs the Open pass for one node (D38) and returns the saved tree. Absent: nodes can't be opened from the UI. */
   open?: (understanding: Understanding, id: string) => Promise<Understanding>;
   /** Answers a question with a read-only agent (Build 5); `onStep` gets each tool call as it happens. */
-  ask?: (understanding: Understanding, request: AskRequest, onStep: (step: AskStep) => void, context?: ChangeContextView) => Promise<Omit<AskReply, "steps">>;
+  ask?: (understanding: Understanding, request: AskRequest, onStep: (step: AskStep) => void, context?: AskContext) => Promise<Omit<AskReply, "steps">>;
 };
+
+/** A change as Ask gets it; for the live preview, `after` is the working tree, so new files and boxes can be cited. */
+export type AskContext = ChangeContextView & { after?: { facts: Facts; understanding: Understanding } };
 
 export function functionRef(fact: FunctionFact | undefined, id: string, componentOf: Map<string, string>): FunctionRef {
   const file = fact?.file ?? id.slice(0, id.indexOf("#"));

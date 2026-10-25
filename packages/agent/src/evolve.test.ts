@@ -9,7 +9,7 @@ import { renamesBetween, resolveCommit, withWorktree } from "@catchup/history";
 import { diffTrees } from "./changes.js";
 import { buildDigest } from "./digest.js";
 import type { Runner } from "./droid.js";
-import { evolve } from "./evolve.js";
+import { closest, evolve } from "./evolve.js";
 import type { Understanding } from "./tree.js";
 import { understand, type UnderstandInputs } from "./understand.js";
 
@@ -205,5 +205,20 @@ describe("offline evolve for the live preview (Build 7)", async () => {
     expect(changes.journeys[0]?.checksRemoved).toEqual(["Check the user"]);
     const same = diffTrees({ understanding: treeA, facts: withGuards(a.facts, 2) }, { understanding: treeA, facts: withGuards(a.facts, 2) }, new Map());
     expect(same.journeys).toEqual([]);
+  });
+});
+
+describe("placing a new file", () => {
+  const imports: Record<string, string[]> = {
+    "api/billing/route.ts": ["auth.ts", "errors.ts"],
+    "api/vote/route.ts": ["auth.ts", "errors.ts", "db.ts"],
+    "api/chat/route.ts": ["ai.ts", "auth.ts", "errors.ts", "db.ts", "redis.ts", "tools.ts", "prompts.ts"],
+  };
+  const importsOf = (f: string): Set<string> => new Set(imports[f] ?? []);
+
+  it("joins the deepest shared folder, then breaks ties by the share of imports in common", () => {
+    const parts = [{ files: ["api/chat/route.ts"] }, { files: ["api/vote/route.ts"] }];
+    expect(closest("api/billing/route.ts", parts, importsOf)).toBe(1);
+    expect(closest("api/chat/new.ts", [{ files: ["api/vote/route.ts"] }, { files: ["api/chat/route.ts"] }], importsOf)).toBe(1);
   });
 });

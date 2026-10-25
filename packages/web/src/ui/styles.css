@@ -341,3 +341,12 @@ code.removed { background: #fdedf2; border-color: #f1c0cf; color: #a3304f; text-
 .node.st-removed { opacity: .28; border-style: dashed; }
 .st-badge.removed { color: var(--err); border-color: #f1c0cf; }
 .st-badge.hidden { display: none; }
+
+/* Preview: ask and drill-down */
+.hero-actions { margin-top: 12px; display: flex; gap: 8px; }
+.preview-crumbs { flex: none; margin: 0 0 8px; }
+.change-card .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.change-card .card-head h3 { margin: 0; }
+.ask-suggest { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0 2px 8px; }
+.chip.suggest { cursor: pointer; text-align: left; white-space: normal; }
+.chip.suggest:hover { border-color: var(--accent, #3b6fd8); }

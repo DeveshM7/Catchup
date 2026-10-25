@@ -21,7 +21,13 @@ export type AskOutput = z.infer<typeof AskOutput>;
 export type AskTurn = { question: string; answer: string };
 
 /** A change to ask about (Build 8): uncommitted work, or the commits between two trees. */
-export type ChangeContext = { label: string; changes: ChangeSet; commits: { sha: string; date: string; subject: string }[] };
+export type ChangeContext = {
+  label: string;
+  changes: ChangeSet;
+  commits: { sha: string; date: string; subject: string }[];
+  /** The code after the change when it isn't the one in `AskInputs` (the working tree, for the live preview): its files, functions and boxes are citable too. */
+  after?: { facts: Facts; understanding: Understanding };
+};
 
 const MAX_COMMITS = 40;
 const SHORT_SHA = 7;
@@ -168,15 +174,31 @@ export function splitCites(cites: string[], facts: Facts, u: Understanding, comm
 }
 
 /** Asks once (one retry on invalid cites) and returns the checked answer. */
+/** What a cite may name: the code asked about, plus what exists only after the change. */
+function citable(inputs: AskInputs): { facts: Facts; understanding: Understanding } {
+  const after = inputs.changes?.after;
+  if (!after) return { facts: inputs.facts, understanding: inputs.understanding };
+  const byKey = <T>(items: T[], key: (t: T) => string): T[] => [...new Map(items.map((t) => [key(t), t])).values()];
+  return {
+    facts: {
+      ...inputs.facts,
+      files: byKey([...after.facts.files, ...inputs.facts.files], (f) => f.path),
+      functions: byKey([...after.facts.functions, ...inputs.facts.functions], (f) => f.id),
+    },
+    understanding: { ...inputs.understanding, nodes: { ...after.understanding.nodes, ...inputs.understanding.nodes } },
+  };
+}
+
 export async function askQuestion(inputs: AskInputs): Promise<Answer> {
+  const { facts, understanding } = citable(inputs);
   const out = await askStructured({
     job: "ask",
     prompt: askPrompt(inputs),
     schema: AskOutput,
-    check: (value) => checkAnswer(value, inputs.facts, inputs.understanding, inputs.changes?.commits),
+    check: (value) => checkAnswer(value, facts, understanding, inputs.changes?.commits),
     runner: inputs.runner,
     onCall: inputs.onCall,
     onRejected: inputs.onRejected,
   });
-  return { answer: out.answer, ...splitCites(out.cites, inputs.facts, inputs.understanding, inputs.changes?.commits) };
+  return { answer: out.answer, ...splitCites(out.cites, facts, understanding, inputs.changes?.commits) };
 }

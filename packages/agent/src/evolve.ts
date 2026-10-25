@@ -99,14 +99,23 @@ function sharedDepth(a: string, b: string): number {
  * The node among `candidates` whose files share the most leading folders with `file`; ties go to the one with more files
  * at that depth, then to the first.
  */
-function closest(file: string, candidates: { files: string[] }[]): number {
+/**
+ * The candidate a new file belongs with: the deepest shared folder, then the most files sharing it, then the most
+ * largest share of imports in common (a new route importing what the vote route imports joins it, not a part that
+ * imports everything).
+ */
+export function closest(file: string, candidates: { files: string[] }[], importsOf: (file: string) => Set<string>): number {
+  const mine = importsOf(file);
   let best = 0;
-  let bestScore = [-1, 0];
+  let bestScore = [-1, 0, 0];
   candidates.forEach((c, i) => {
     const depths = c.files.map((f) => sharedDepth(file, f));
     const depth = Math.max(-1, ...depths);
-    const score = [depth, depths.filter((d) => d === depth).length];
-    if (score[0]! > bestScore[0]! || (score[0] === bestScore[0] && score[1]! > bestScore[1]!)) {
+    const theirs = new Set(c.files.flatMap((f) => [...importsOf(f)]));
+    const shared = [...mine].filter((t) => theirs.has(t)).length;
+    const score = [depth, depths.filter((d) => d === depth).length, shared / Math.max(1, new Set([...mine, ...theirs]).size)];
+    const better = score.findIndex((v, k) => v !== bestScore[k]);
+    if (better !== -1 && score[better]! > bestScore[better]!) {
       best = i;
       bestScore = score;
     }
@@ -130,11 +139,14 @@ function evolveParts(work: Work, before: Understanding, map: Remap): { parts: st
   before.parts.forEach(walk);
 
   const placed = new Set(before.parts.flatMap((id) => draft.get(id)?.files ?? []));
+  const imports = new Map<string, Set<string>>();
+  for (const imp of work.inputs.facts.imports) imports.set(imp.from, (imports.get(imp.from) ?? new Set()).add(imp.to));
+  const importsOf = (f: string): Set<string> => imports.get(f) ?? new Set();
   const added = new Map<string, string[]>();
   for (const file of work.allFiles.filter((f) => !placed.has(f))) {
     let level = before.parts.filter((id) => draft.has(id));
     while (level.length > 0) {
-      const id = level[closest(file, level.map((p) => draft.get(p)!))]!;
+      const id = level[closest(file, level.map((p) => draft.get(p)!), importsOf)]!;
       draft.get(id)!.files.push(file);
       added.set(id, [...(added.get(id) ?? []), file]);
       const children = draft.get(id)!.node.children;

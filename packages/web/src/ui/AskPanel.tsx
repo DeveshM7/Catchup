@@ -21,7 +21,12 @@ type Props = {
   onClose: () => void;
   /** Questions are about this change while it is set (Build 8): the preview's, or a timelapse step's. */
   change?: { request: NonNullable<AskRequest["changes"]>; label: string } | null;
+  /** A question put in the box from outside (an "Ask about this" button); `at` makes the same text count again. */
+  draft?: { text: string; at: number } | null;
 };
+
+/** Starting points when the questions are about a change. */
+const CHANGE_QUESTIONS = ["What do these changes do, and what could they break?", "Is anything less safe than before?", "What should I test before committing this?"];
 
 const HISTORY = 3;
 
@@ -110,8 +115,11 @@ function Steps({ steps, done }: { steps: AskStep[]; done: boolean }) {
 }
 
 /** The Ask chat (Build 5): a read-only agent answers about the code; its answers cite boxes, functions and files. */
-export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onLight, onSelect, onClose, change }: Props) {
+export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onLight, onSelect, onClose, change, draft }: Props) {
   const [question, setQuestion] = useState("");
+  useEffect(() => {
+    if (draft) setQuestion(draft.text);
+  }, [draft]);
   const end = useRef<HTMLDivElement>(null);
   const busy = turns.some((t) => !t.reply && !t.error);
   useEffect(() => {
@@ -119,8 +127,8 @@ export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onL
     void end.current?.scrollIntoView({ block: "end" });
   }, [turns]);
 
-  const send = async (): Promise<void> => {
-    const text = question.trim();
+  const send = async (asked = question): Promise<void> => {
+    const text = asked.trim();
     if (!text || busy) return;
     const id = Date.now();
     const history = turns.flatMap((t) => (t.reply ? [{ question: t.question, answer: t.reply.answer }] : [])).slice(-HISTORY);
@@ -145,13 +153,15 @@ export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onL
   return (
     <aside className="ask">
       <div className="panel-bar">
-        <strong>Ask about the code</strong>
+        <strong>{change ? "Ask about the changes" : "Ask about the code"}</strong>
         <button className="close" onClick={onClose} title="Close">×</button>
       </div>
       <div className="ask-turns">
         {turns.length === 0 && (
           <p className="muted ask-empty">
-            Ask how something works, where to change it, or why. A read-only agent reads the code and answers; the boxes it cites light up.
+            {change
+              ? "Ask what these changes do or could break. A read-only agent reads the new code with the computed change set in hand; the boxes it cites light up."
+              : "Ask how something works, where to change it, or why. A read-only agent reads the code and answers; the boxes it cites light up."}
           </p>
         )}
         {turns.map((t) => (
@@ -179,6 +189,13 @@ export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onL
         {change && (
           <div className="ask-about">
             About <span className="chip change">{change.label}</span>
+          </div>
+        )}
+        {change && !busy && !question && (
+          <div className="ask-suggest">
+            {CHANGE_QUESTIONS.map((q) => (
+              <button key={q} className="chip suggest" onClick={() => void send(q)}>{q}</button>
+            ))}
           </div>
         )}
         {aboutNode && (

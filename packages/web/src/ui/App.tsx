@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MapData, TreeData } from "../shared/types";
 import { answerScope, FAMILIARITIES, canOpen, codeName, panelText, pathTo, selectionScope, type Familiarity, type Selection } from "../shared/view";
-import { api } from "./api";
+import { api, setWorkingTree } from "./api";
 import { ArchCanvas } from "./ArchCanvas";
 import { AskPanel, type Turn } from "./AskPanel";
 import { Canvas } from "./Canvas";
@@ -62,6 +62,7 @@ export function App() {
   const [asking, setAsking] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [about, setAbout] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ text: string; at: number } | null>(null);
   const [litTurn, setLitTurn] = useState<Turn | null>(null);
   const preview = usePreview(route.view === "preview");
   const [hasTimelapse, setHasTimelapse] = useState(false);
@@ -83,6 +84,10 @@ export function App() {
   if (!data) return <div className="center">Loading…</div>;
 
   const sel = stack.at(-1);
+  // On the Preview tab the detail panel shows the working tree: new files and boxes, and source as saved.
+  const onPreview = route.view === "preview" && Boolean(preview?.tree);
+  const panelData = onPreview && preview?.tree ? preview.tree : data;
+  setWorkingTree(onPreview);
   // A selected box wins; otherwise the answer last lit shows what it cites (Build 5).
   const scope = sel || !litTurn?.reply ? selectionScope(sel, data) : answerScope(litTurn.reply, data);
   const askAbout = (id: string | null): void => {
@@ -249,7 +254,19 @@ export function App() {
 
         {route.view === "map" && <FullMap />}
 
-        {route.view === "preview" && <PreviewPage view={preview} mode={mode} onSelect={select} />}
+        {route.view === "preview" && (
+          <PreviewPage
+            view={preview}
+            mode={mode}
+            selected={selectedBox}
+            onSelect={select}
+            onAsk={(text) => {
+              setAbout(null);
+              setDraft(text ? { text, at: Date.now() } : null);
+              setAsking(true);
+            }}
+          />
+        )}
 
         {route.view === "timelapse" && <TimelapsePage onStep={setTimelapseStep} />}
       </main>
@@ -260,7 +277,7 @@ export function App() {
             {stack.length > 1 ? <button className="link-text" onClick={() => setStack((s) => s.slice(0, -1))}>← Back</button> : <span />}
             <button className="close" onClick={() => select(null)} title="Close">×</button>
           </div>
-          <Panel sel={sel} data={data} mode={mode} onSelect={push} onOpen={open} onAsk={askAbout} />
+          <Panel sel={sel} data={panelData} mode={mode} onSelect={push} onOpen={open} onAsk={askAbout} />
         </aside>
       )}
 
@@ -278,6 +295,7 @@ export function App() {
             setStack([]);
           }}
           onSelect={select}
+          draft={draft}
           onClose={() => {
             setAsking(false);
             setLitTurn(null);

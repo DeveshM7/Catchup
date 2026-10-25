@@ -116,7 +116,7 @@ function partMember(node: UnderstandingNode, color: number, functionsIn: (files:
 }
 
 /** The boxes one canvas shows: the top parts (`root`), a part's children, or a leaf part's files. */
-function members(inputs: TreeInputs, id: string): Member[] | undefined {
+function members(inputs: TreeInputs, id: string, filesWhenUnopened = false): Member[] | undefined {
   const u = inputs.understanding;
   const counts = new Map<string, number>();
   for (const fn of inputs.facts.functions) counts.set(fn.file, (counts.get(fn.file) ?? 0) + 1);
@@ -129,7 +129,7 @@ function members(inputs: TreeInputs, id: string): Member[] | undefined {
   for (let up = parent.get(top); up !== undefined; up = parent.get(top)) top = up;
   const color = Math.max(0, u.parts.indexOf(top));
   if (Array.isArray(node.children)) return node.children.flatMap((c) => (u.nodes[c] ? [partMember(u.nodes[c], color, functionsIn)] : []));
-  if (node.children === "unopened") return undefined;
+  if (node.children === "unopened" && !filesWhenUnopened) return undefined;
   const loc = new Map(inputs.facts.files.map((f) => [f.path, f.loc]));
   return node.anchor.files.map((f) => ({
     id: `file:${f}`,
@@ -146,10 +146,11 @@ function members(inputs: TreeInputs, id: string): Member[] | undefined {
 /**
  * One canvas (ARCHITECTURE "Rendering"): the boxes, links between them weighted by the calls and imports that cross
  * (each box's 3 strongest drawn), and the outside systems their files call. Laid out by elkjs, so the same tree
- * always draws the same picture. Undefined for a node that isn't a part or isn't opened yet.
+ * always draws the same picture. Undefined for a node that isn't a part or isn't opened yet (with `filesWhenUnopened`,
+ * as the live preview asks since it can't run Open, an unopened part shows its files).
  */
-export async function canvasGraph(inputs: TreeInputs, id: string): Promise<MapGraph | undefined> {
-  const list = members(inputs, id);
+export async function canvasGraph(inputs: TreeInputs, id: string, options: { filesWhenUnopened?: boolean } = {}): Promise<MapGraph | undefined> {
+  const list = members(inputs, id, options.filesWhenUnopened);
   if (!list) return undefined;
   const owner = new Map<string, string>();
   for (const m of list) for (const f of m.anchor) owner.set(f, m.id);
