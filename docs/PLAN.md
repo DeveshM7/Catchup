@@ -64,7 +64,7 @@ _The live checklist. Tick boxes as you go. Each phase / build has a "done when" 
 
 # Roadmap (D35)
 
-Three parts, each finished before the next. Every build ends with its "done when" check, tests, typecheck, lint, and a Progress log line. **Current: Build 4.**
+Three parts, each finished before the next. Every build ends with its "done when" check, tests, typecheck, lint, and a Progress log line. **Current: Build 5.** Build 4 closed early by the user (D55).
 
 ## Part 1 — Understand
 
@@ -112,8 +112,8 @@ Three parts, each finished before the next. Every build ends with its "done when
 ### Build 4 — Generality check
 
 - [x] Hand-written target for the second repo (`docs/targets/tsup.md`)
-- [ ] Run Builds 1–3 on it; fix what breaks with general rules only
-- [ ] Umami still works (regression)
+- [x] Run Builds 1–3 on it; fix what breaks with general rules only (D52–D54; dashboard on tsup not checked by eye)
+- [x] Umami still works (regression): analyzer smoke tests pass; no new Understand run on Umami
 
 **Done when:** the second repo's tree matches its target in substance with no repo-specific rules.
 
@@ -204,3 +204,4 @@ _One line per session: date, what got done, what's next, anything surprising._
 - 2026-10-25 — Build 4 analyzer fixes (D52, D53): depth 12, worker threads linked to their file's top-level code, `new` on a class without a constructor isn't runtime-only, TypeScript compiler calls kept, tools (esbuild, Rollup, tsc, …) shown next to services. tsup bin journey 53 → 115 functions with esbuild, the dts worker and tsc; ai-chatbot journeys and Umami unchanged. `tiny-cli` gained a worker file. 169 tests, typecheck, lint pass. Next: `catchup understand` on tsup.
 - 2026-10-25 — First live Understand run through the Anthropic API (D51) on tsup: 10 Claude calls (1 retry), 0 tool calls, 53 s, ~69k tokens; second run 0 calls, byte-identical. Scored against `docs/targets/tsup.md`: summary ✓; parts by role ✓ (CLI, build engine, esbuild integration, plugins, declarations, helpers, tooling) but the declarations part holds only `ts-resolve.ts` while `rollup.ts`/`tsc.ts`/`api-extractor.ts` sit in "Build engine"; main journey ✓ (command → settings check → esbuild → output plugins → dts branch → watch branch; the plugins step is covered from the factories, so the renderChunk limit didn't hurt); second journey `build()` repeats the first (same flow family); glossary partial (no config file, externals, dts vs experimentalDts); surprises 0 of 5 (agent read no code). Next: journeys from different families, deterministic surprise hints (unused exports), push the extras pass to read code.
 - 2026-10-25 — D54 (journeys from different families with ≥ 3 functions, lenient step order, possibly-unused exports in `hot.md`, extras told to read code). tsup live run: 9 calls, no retries, 35 s. Against the target: summary ✓, 6 parts by role ✓ (declarations part now holds `rollup.ts`/`tsc.ts`/`api-extractor.ts`/`ts-resolve.ts`), one main journey ✓ (command → options check → esbuild → output plugins → dts branch → watch branch), defineConfig as an other flow ✓, start-here ✓ (`index.ts`, `esbuild/index.ts`, `cli-main.ts`, `plugin.ts`), changes ✓; glossary partial (no config file / externals); surprises 2 of 5 (deprecation; 3 of 4 dead exports, hedged), with 1 tool call in the whole run; `run.ts` described as "Run after build" though nothing calls it. Next: make the extras pass actually read code, check the dashboard on tsup and Umami.
+- 2026-10-25 — Build 4 closed by user choice (D55) with known gaps: surprises 2 of 5 on tsup (the extras agent barely reads code), glossary misses config files and externals, dashboard on tsup and Umami not checked by eye. Next: Build 5 (Ask).
