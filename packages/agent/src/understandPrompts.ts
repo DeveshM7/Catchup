@@ -160,6 +160,6 @@ export function extrasPrompt(ctx: PromptContext, summary: string, parts: Underst
     "- glossary: 3–8 key ideas a reader must know to follow this codebase (term: 1–3 words; meaning: at most 30 words, what it means here).",
     "- startHere: 2–4 files to read first, best first (file: repo-relative path; why: at most 20 words).",
     "- changes: 3–6 common changes and where to make them (task: at most 10 words, \"Add a new AI tool\"; cites: the files or functions to touch).",
-    "- surprises: 0–5 things that would surprise a newcomer: half-wired features, dead ends, mismatches, swallowed errors, duplicated logic (text: at most 35 words). Only what you verified in the code; \"Possibly unused\" in hot.md lists candidates for dead code.",
+    "- surprises: 0–5 things that would surprise a newcomer: half-wired features, dead ends, mismatches, swallowed errors, duplicated logic (text: at most 35 words). Only what you verified in the code; in hot.md, \"Possibly unused\" lists candidates for dead code and \"Errors caught and not re-thrown\" candidates for hidden failures: read those catches.",
   ].join("\n");
 }

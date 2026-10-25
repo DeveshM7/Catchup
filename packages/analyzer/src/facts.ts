@@ -14,6 +14,8 @@ export type FunctionFact = {
   hash: string;
   /** Exported from its module (directly or re-exported). */
   exported?: boolean;
+  /** Has a `catch` (its own, not a nested function's) that never throws: a failure there is handled or hidden (D61). */
+  swallows?: boolean;
 };
 
 /** `to` is a repo-relative file path, or `pkg:<name>` for an installed package. */

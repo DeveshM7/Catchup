@@ -56,3 +56,18 @@ describe("extractFunctions", () => {
     expect(names("export const Page = () => <div>hi</div>;", "p.tsx")).toEqual(["Page"]);
   });
 });
+
+describe("errors caught and not re-thrown (D61)", () => {
+  it("marks functions whose own catch never throws, not ones that rethrow or whose catch is in a nested function", () => {
+    const fns = extractFunctions(
+      "x.ts",
+      [
+        "export async function hides() { try { await a(); } catch (e) { console.log(e); } }",
+        "export async function rethrows() { try { await a(); } catch (e) { log(e); throw e; } }",
+        "export function outer() { const inner = () => { try { a(); } catch {} }; return inner; }",
+        "export function plain() { return 1; }",
+      ].join("\n"),
+    );
+    expect(Object.fromEntries(fns.map((f) => [f.name, f.swallows === true]))).toEqual({ hides: true, rethrows: false, outer: false, "outer.inner": true, plain: false });
+  });
+});

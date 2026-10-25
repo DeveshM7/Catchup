@@ -145,6 +145,7 @@ function hotDigest(inputs: DigestInputs): string {
     .slice(0, HOT_FILES)
     .map(([path, s]) => `- ${path} — ${reasons(s)}, ${s.churn} commits${s.lastChanged ? `, last ${s.lastChanged.slice(0, 10)}` : ""}${s.side ? `, ${s.side}` : ""}`);
   const unused = unusedExports(inputs);
+  const swallowing = swallowingFunctions(inputs);
   return [
     "# Hot spots",
     "",
@@ -159,10 +160,25 @@ function hotDigest(inputs: DigestInputs): string {
     "## Possibly unused",
     "Exported, but nothing in the source calls, renders or passes them, and no entry point starts them. Tests, dynamic imports or other packages may still use them: check (Grep) before calling them dead.",
     ...(unused.length ? unused.map((id) => `- [${id}]`) : ["(none)"]),
+    "",
+    "## Errors caught and not re-thrown",
+    "These functions catch an error and never throw from the catch: the failure is handled, logged, or hidden. Read the catch before saying which.",
+    ...(swallowing.length ? swallowing.map((id) => `- [${id}]`) : ["(none)"]),
   ].join("\n");
 }
 
 const MAX_UNUSED = 15;
+const MAX_SWALLOWING = 15;
+
+/** Functions whose own catch never throws, the ones most flows reach first (D61). */
+export function swallowingFunctions(inputs: Pick<DigestInputs, "facts" | "signals">): string[] {
+  return inputs.facts.functions
+    .filter((fn) => fn.swallows)
+    .map((fn) => ({ id: fn.id, flows: inputs.signals.functions[fn.id]?.flows ?? 0 }))
+    .sort((a, b) => b.flows - a.flows || (a.id < b.id ? -1 : 1))
+    .slice(0, MAX_SWALLOWING)
+    .map((f) => f.id);
+}
 
 /** Exported top-level functions with no caller in the facts and no entry point (D54): candidates for dead code. */
 export function unusedExports(inputs: Pick<DigestInputs, "facts" | "signals">): string[] {

@@ -166,6 +166,28 @@ export function isRenderRoot(sourceFile: ts.SourceFile): boolean {
 
 export type CollectedFunction = { fact: FunctionFact; node: FunctionNode | ts.SourceFile };
 
+/** A `catch` in this function's own body (not a nested function's) whose block never throws. */
+function swallowsErrors(node: ts.Node): boolean {
+  let found = false;
+  const throws = (block: ts.Node): boolean => {
+    let hit = false;
+    const visit = (n: ts.Node): void => {
+      if (hit || (n !== block && ts.isFunctionLike(n))) return;
+      if (ts.isThrowStatement(n)) hit = true;
+      else ts.forEachChild(n, visit);
+    };
+    visit(block);
+    return hit;
+  };
+  const visit = (n: ts.Node): void => {
+    if (found || (n !== node && ts.isFunctionLike(n))) return;
+    if (ts.isCatchClause(n) && !throws(n.block)) found = true;
+    else ts.forEachChild(n, visit);
+  };
+  visit(node);
+  return found;
+}
+
 /**
  * Named functions in a parsed file. IDs are `<path>#<qualified name>`; repeated names get `~2`, `~3`.
  * With `moduleUnit` (or in an app root), the file's top-level code is one more function, `<path>#(module)`.
@@ -192,6 +214,7 @@ export function collectFunctions(path: string, sourceFile: ts.SourceFile, module
           startLine: lineOf(node.getStart(sourceFile)),
           endLine: lineOf(node.getEnd()),
           hash: hashNode(node, sourceFile),
+          ...(swallowsErrors(node) ? { swallows: true } : {}),
         },
       });
       ts.forEachChild(node, (child) => visit(child, [...scope, name]));
