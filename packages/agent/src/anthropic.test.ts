@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
@@ -87,6 +87,20 @@ describe("read-only tools", () => {
     expect(runReadTool(root, "Read", { file_path: "missing.ts" }).isError).toBe(true);
     expect(runReadTool(root, "Execute", {}).isError).toBe(true);
   });
+
+  it("does not grep through symlinked files outside the repo or aliasing secrets", () => {
+    const root = repo();
+    const outside = mkdtempSync(join(tmpdir(), "catchup-outside-"));
+    writeFileSync(join(outside, "outside.ts"), "fetch('synthetic-outside');");
+    symlinkSync(join(outside, "outside.ts"), join(root, "src/escape.ts"));
+    symlinkSync(join(root, ".env"), join(root, "src/config.ts"));
+    try {
+      expect(runReadTool(root, "Grep", { pattern: "fetch" }).content).toBe("src/chat.ts:2:   return fetch('/api/chat');");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("anthropicSession under agentRunner", () => {
@@ -112,6 +126,23 @@ describe("anthropicSession under agentRunner", () => {
       expect(await run(create, root, logs)).toMatchObject({ ok: false, error: expect.stringContaining("forbidden tool use") });
       expect(logs[0]?.outcome).toBe("blocked");
       expect(requests).toHaveLength(1);
+    }
+  });
+
+  it("keeps explicitly allowed digest roots searchable when checking grep matches", async () => {
+    const root = repo();
+    const digest = mkdtempSync(join(tmpdir(), "catchup-digest-"));
+    writeFileSync(join(digest, "repo.md"), "Known digest text");
+    const { create, requests } = fakeCreate([toolUse("t1", "Grep", { path: digest, pattern: "Known" }), text({ pattern: "x", n: [] })]);
+    try {
+      const result = await agentRunner({ pass: "ask", cwd: root, roots: [digest], open: anthropicSession(create), log: () => undefined })("p", schema);
+      expect(result.ok).toBe(true);
+      expect(requests[1]?.messages.at(-1)?.content).toEqual([
+        { type: "tool_result", tool_use_id: "t1", content: expect.stringContaining("repo.md:1: Known digest text") },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(digest, { recursive: true, force: true });
     }
   });
 

@@ -1,13 +1,14 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { resolveCommit, withWorktree } from "../../history/src/index.js";
 import { analyze, buildCallTrees, flowFamilies, type CallSite, type TreeNode } from "./index.js";
 
 const REPO = fileURLToPath(new URL("../../../fixtures/ai-chatbot", import.meta.url));
 
 describe.skipIf(!existsSync(REPO))("analyze fixtures/ai-chatbot (smoke)", () => {
   it("finds every route and the systems it touches", { timeout: 120_000 }, async () => {
-    const { facts, snapshot } = await analyze(REPO, "smoke");
+    const { facts, snapshot } = await withWorktree(REPO, resolveCommit(REPO, "HEAD"), (dir) => analyze(dir, "smoke"));
     expect(snapshot.externals.map((e) => e.name)).toEqual(
       expect.arrayContaining(["AI model (AI SDK)", "Blob storage (Vercel)", "Postgres", "Redis"]),
     );
@@ -29,7 +30,7 @@ describe.skipIf(!existsSync(REPO))("analyze fixtures/ai-chatbot (smoke)", () => 
   });
 
   it("follows sending a message from the UI through the server and back to the browser (D42)", { timeout: 120_000 }, async () => {
-    const { facts, snapshot } = await analyze(REPO, "smoke");
+    const { facts, snapshot } = await withWorktree(REPO, resolveCommit(REPO, "HEAD"), (dir) => analyze(dir, "smoke"));
     const send = buildCallTrees(facts, snapshot).find((t) => t.entryPoint.label === "PureMultimodalInput onSubmit");
     const reached = new Map<string, CallSite | undefined>();
     const walk = (node: TreeNode): void => {

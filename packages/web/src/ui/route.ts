@@ -3,7 +3,12 @@ export type Route = { view: "home" } | { view: "arch"; id: string } | { view: "f
 
 export function parseRoute(hash: string): Route | undefined {
   const [view, ...rest] = hash.replace(/^#\/?/, "").split("/");
-  const id = decodeURIComponent(rest.join("/"));
+  let id: string;
+  try {
+    id = decodeURIComponent(rest.join("/"));
+  } catch {
+    return undefined;
+  }
   if (view === "home" || view === "map" || view === "preview" || view === "timelapse") return { view };
   if (view === "arch") return { view, id: id || "root" };
   if (view === "flows") return { view, id };

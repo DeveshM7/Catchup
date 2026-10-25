@@ -1,6 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Facts, Signals, Snapshot } from "@catchup/analyzer";
+import { refreshFunctionHashes, type Facts, type Signals, type Snapshot } from "@catchup/analyzer";
 
 export const CATCHUP_DIR = ".catchup";
 
@@ -87,7 +88,19 @@ export function loadExplained<T>(repoRoot: string, sha: string): T | undefined {
 }
 
 export function loadFacts(repoRoot: string, sha: string): Facts {
-  return JSON.parse(readFileSync(storePaths(repoRoot, sha).facts, "utf8")) as Facts;
+  const path = storePaths(repoRoot, sha).facts;
+  const stored = JSON.parse(readFileSync(path, "utf8")) as Facts;
+  // All consumers (startup, Preview's HEAD, evolve, diff and timelapse) see the same hash version.
+  // Never migrate from working files: they may contain the very changes being compared.
+  let prefix: string | undefined;
+  const facts = refreshFunctionHashes(stored, (file) => {
+    prefix ??= execFileSync("git", ["-C", repoRoot, "rev-parse", "--show-prefix"], { encoding: "utf8" }).trim();
+    return execFileSync("git", ["-C", repoRoot, "show", `${sha}:${prefix}${file}`], {
+      encoding: "utf8", maxBuffer: 32 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"],
+    });
+  });
+  if (facts !== stored) writeJson(path, facts);
+  return facts;
 }
 
 /** Writes the digest files for one commit; returns their folder (D38). */

@@ -1,13 +1,14 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { resolveCommit, withWorktree } from "../../history/src/index.js";
 import { analyze, buildCallTrees, flowFamilies, PKG_PREFIX } from "./index.js";
 
 const UMAMI = fileURLToPath(new URL("../../../fixtures/umami", import.meta.url));
 
 describe.skipIf(!existsSync(UMAMI))("analyze fixtures/umami (smoke)", () => {
   it("produces a sensible map", { timeout: 120_000 }, async () => {
-    const { facts, snapshot } = await analyze(UMAMI, "smoke");
+    const { facts, snapshot } = await withWorktree(UMAMI, resolveCommit(UMAMI, "HEAD"), (dir) => analyze(dir, "smoke"));
     const files = new Set(facts.files.map((f) => f.path));
     const functionIds = new Set(facts.functions.map((f) => f.id));
 

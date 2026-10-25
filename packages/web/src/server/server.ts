@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,12 +31,14 @@ function reply<T>(res: ServerResponse, work: Promise<T | undefined>, missing: st
   );
 }
 
-export function sourceOf(inputs: DashboardInputs, id: string): SourceView | undefined {
+export function sourceOf(inputs: DashboardInputs, id: string, workingTree = false): SourceView | undefined {
   const fact = inputs.facts.functions.find((f) => f.id === id);
   if (!fact) return undefined;
   let text: string;
   try {
-    text = readFileSync(join(inputs.repoRoot, fact.file), "utf8");
+    text = !workingTree && /^[a-f0-9]{40}$/i.test(inputs.facts.sha)
+      ? execFileSync("git", ["-C", inputs.repoRoot, "show", `${inputs.facts.sha}:./${fact.file}`], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
+      : readFileSync(join(inputs.repoRoot, fact.file), "utf8");
   } catch {
     return undefined;
   }
@@ -113,6 +116,7 @@ function readBody(req: IncomingMessage): Promise<string> {
 /** The request as sent, checked: a non-empty question, an optional node id, a short history. */
 export function parseAsk(body: string): AskRequest {
   const raw = JSON.parse(body) as Record<string, unknown>;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("request must be a JSON object");
   const question = typeof raw.question === "string" ? raw.question.trim() : "";
   if (!question || question.length > MAX_QUESTION) throw new Error(`question must be 1–${MAX_QUESTION} characters`);
   const history = Array.isArray(raw.history)
@@ -158,9 +162,9 @@ async function streamAsk(inputs: DashboardInputs, state: TreeState, preview: Pre
     const u = state.understanding();
     if (!u) throw new Error("no understanding yet; run: catchup understand <path>");
     if (!inputs.ask) throw new Error("asking is not available here");
-    if (request.node !== undefined && !u.nodes[request.node]) throw new Error(`no node "${request.node}"`);
     const steps: AskStep[] = [];
     const context = changeContext(inputs, preview, request.changes);
+    if (request.node !== undefined && !u.nodes[request.node] && !context?.after?.understanding.nodes[request.node]) throw new Error(`no node "${request.node}"`);
     const reply = await inputs.ask(
       u,
       request,
@@ -236,6 +240,10 @@ function apiPlugin(inputs: DashboardInputs, preview: Preview | undefined): Plugi
       server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         if (!url.pathname.startsWith("/api/")) return next();
+        // A local dashboard is not permission for another website to spend tokens or write Open results.
+        if (req.method === "POST" && (req.headers["sec-fetch-site"] === "cross-site" || (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`))) {
+          return send(res, 403, { error: "cross-origin requests are not allowed" });
+        }
         const param = (name: string): string => url.searchParams.get(name) ?? "";
         if (url.pathname === "/api/ask") {
           if (req.method !== "POST") return send(res, 405, { error: "use POST" });
@@ -271,7 +279,7 @@ function apiPlugin(inputs: DashboardInputs, preview: Preview | undefined): Plugi
           return tree ? send(res, 200, treeView(tree, code.facts, code.snapshot)) : send(res, 404, { error: "no such entry point" });
         }
         if (url.pathname === "/api/source") {
-          const source = sourceOf(code, param("fn"));
+          const source = sourceOf(code, param("fn"), param("preview") === "1");
           return source ? send(res, 200, source) : send(res, 404, { error: "no such function" });
         }
         send(res, 404, { error: "unknown endpoint" });

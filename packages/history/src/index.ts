@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export const packageName = "history";
@@ -50,9 +50,9 @@ export type Commit = { sha: string; date: string; subject: string; tags: string[
 
 const FIELD = "\u001f";
 
-/** Commits after `from` up to and including `to`, oldest first (no merges). */
+/** Commits after `from` up to and including `to`, parents before children (including merge resolutions). */
 export function commitsBetween(repoRoot: string, from: string, to: string): Commit[] {
-  const out = git(repoRoot, ["log", "--reverse", "--no-merges", `--format=%H${FIELD}%cI${FIELD}%s${FIELD}%D`, `${from}..${to}`]);
+  const out = git(repoRoot, ["log", "--reverse", "--topo-order", `--format=%H${FIELD}%cI${FIELD}%s${FIELD}%D`, `${from}..${to}`]);
   return out
     .split("\n")
     .filter(Boolean)
@@ -98,8 +98,22 @@ export async function withWorktree<T>(repoRoot: string, sha: string, fn: (dir: s
   // `.catchup/` ignores itself (D25), so the worktree never shows up in the repo's own file list.
   const ignore = join(repoRoot, ".catchup", ".gitignore");
   if (!existsSync(ignore)) writeFileSync(ignore, "*\n");
-  if (existsSync(dir)) git(repoRoot, ["worktree", "remove", "--force", dir]);
-  git(repoRoot, ["worktree", "add", "--detach", "--force", dir, sha]);
+  // Reserve the stable path exclusively. Never remove another in-flight caller's checkout.
+  // Stable paths also keep prompt hashes (which include the digest path) reusable.
+  if (existsSync(dir)) {
+    // A folder git doesn't list as a worktree is a crashed run's leftover; a listed one may be in use.
+    git(repoRoot, ["worktree", "prune"]);
+    const listed = git(repoRoot, ["worktree", "list", "--porcelain"]).split("\n").some((l) => l === `worktree ${realpathSync(dir)}`);
+    if (listed) throw new Error(`a checkout of ${sha.slice(0, 9)} is in use at ${dir} (another run, or one that was killed: git -C ${repoRoot} worktree remove --force ${dir})`);
+    rmSync(dir, { recursive: true, force: true });
+  }
+  mkdirSync(dir);
+  try {
+    git(repoRoot, ["worktree", "add", "--detach", "--force", dir, sha]);
+  } catch (error) {
+    if (existsSync(dir)) rmdirSync(dir);
+    throw error;
+  }
   try {
     return await fn(dir);
   } finally {
@@ -124,7 +138,8 @@ export function pickCheckpoints(commits: Commit[], count: number): Commit[] {
   const span = Date.parse(last.date) - start;
   for (let k = 1; chosen.size < count && k < count; k += 1) {
     const at = start + (span * k) / (count - 1);
-    const nearest = commits.reduce((best, c) => (Math.abs(Date.parse(c.date) - at) < Math.abs(Date.parse(best.date) - at) ? c : best));
+    const remaining = commits.filter((c) => !chosen.has(c));
+    const nearest = remaining.reduce((best, c) => (Math.abs(Date.parse(c.date) - at) < Math.abs(Date.parse(best.date) - at) ? c : best));
     chosen.add(nearest);
   }
   return commits.filter((c) => chosen.has(c));

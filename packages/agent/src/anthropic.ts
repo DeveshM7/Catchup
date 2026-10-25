@@ -1,7 +1,7 @@
 import { globSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
-import { READ_TOOLS, type AgentEvent, type AgentSession, type OpenSession, type SessionOptions, type TokenCount } from "./agent.js";
+import { READ_TOOLS, toolProblem, type AgentEvent, type AgentSession, type OpenSession, type SessionOptions, type TokenCount } from "./agent.js";
 import { DEFAULT_MODEL, type Runner } from "./droid.js";
 
 /** Claude straight through the Anthropic API (D51), as an alternative to Droid. Same Runner / AgentSession contracts. */
@@ -163,12 +163,14 @@ function globTool(cwd: string, input: Record<string, unknown>): string {
   return found.length === 0 ? "(no matches)" : found.slice(0, MAX_LISTED).join("\n") + (found.length > MAX_LISTED ? `\n… ${found.length - MAX_LISTED} more` : "");
 }
 
-function grepTool(cwd: string, input: Record<string, unknown>): string {
+function grepTool(cwd: string, input: Record<string, unknown>, permit: SessionOptions["permit"]): string {
   const regex = new RegExp(str(input.pattern) ?? "");
   const base = resolve(cwd, str(input.path) ?? ".");
   const files = statSync(base).isFile() ? [base] : globFiles(base, [str(input.glob_pattern) ?? "**/*"]).map((f) => join(base, f));
   const hits: string[] = [];
   for (const file of files) {
+    // Checking the search directory alone does not constrain symlinked matches.
+    if (!permit([{ name: "Read", input: { file_path: file } }])) continue;
     const stat = statSync(file);
     if (!stat.isFile() || stat.size > MAX_FILE_BYTES) continue;
     const text = readFileSync(file, "utf8");
@@ -183,11 +185,16 @@ function grepTool(cwd: string, input: Record<string, unknown>): string {
 }
 
 /** Runs one read-only tool; paths were already checked by the permission handler. */
-export function runReadTool(cwd: string, name: string, input: Record<string, unknown>): { content: string; isError: boolean } {
+export function runReadTool(
+  cwd: string,
+  name: string,
+  input: Record<string, unknown>,
+  permit: SessionOptions["permit"] = (uses) => uses.every((use) => toolProblem(use, cwd, [cwd]) === undefined),
+): { content: string; isError: boolean } {
   try {
     const run = { Read: readTool, LS: lsTool, Glob: globTool, Grep: grepTool }[name];
     if (!run) return { content: `unknown tool ${name}`, isError: true };
-    return { content: run(cwd, input) || "(empty)", isError: false };
+    return { content: run(cwd, input, permit) || "(empty)", isError: false };
   } catch (e) {
     return { content: errorText(e), isError: true };
   }
@@ -240,7 +247,7 @@ export function anthropicSession(create: CreateMessage = defaultCreate()): OpenS
               const result = stopped
                 ? { content: "Stopped: no more tool calls.", isError: true }
                 : options.permit([{ name: use.name, input }])
-                  ? runReadTool(options.cwd, use.name, input)
+                  ? runReadTool(options.cwd, use.name, input, options.permit)
                   : { content: `Denied: ${use.name} is not allowed here (read-only, inside the repository).`, isError: true };
               results.push({ type: "tool_result", tool_use_id: use.id, content: result.content, ...(result.isError ? { is_error: true } : {}) });
             }

@@ -46,15 +46,17 @@ function placeSteps(input: LaneStep[], laneIndex: Map<string, number>): { cells:
     const from = origin[i] === undefined ? undefined : cells[origin[i]];
     if (!from) return;
     const lane = laneIndex.get(step.lane) ?? 0;
-    for (let col = from.col; ; col++) {
+    const last = Math.max(0, ...cells.flatMap((c) => c.col)) + 1;
+    for (let col = from.col; col <= last; col++) {
       if (taken.has(key(lane, col))) continue;
       const between =
         col === from.col
           ? Array.from({ length: Math.max(0, Math.abs(lane - from.lane) - 1) }, (_, k) => key(Math.min(lane, from.lane) + 1 + k, col))
           : Array.from({ length: col - from.col - 1 }, (_, k) => key(lane, from.col + 1 + k));
       if (col === from.col && lane === from.lane) continue;
-      if (between.some((c) => taken.has(c))) continue;
-      for (const c of between) taken.add(c);
+      // If the row is blocked, use a fresh column and route through the lane header.
+      // Searching forever cannot find a clear row once an earlier column is occupied.
+      if (between.some((c) => taken.has(c)) && col !== last) continue;
       taken.add(key(lane, col));
       cells[i] = { lane, col };
       return;
@@ -64,13 +66,19 @@ function placeSteps(input: LaneStep[], laneIndex: Map<string, number>): { cells:
 }
 
 /** An orthogonal route between two boxes: straight down/up within a column, else through the gap after `a`. */
-function route(a: FlowBox, b: FlowBox, offset: number): Point[] {
+function route(a: FlowBox, b: FlowBox, offset: number, boxes: FlowBox[]): Point[] {
   const cx = a.x + a.width / 2;
   if (a.x === b.x) return b.y > a.y ? [{ x: cx, y: a.y + a.height }, { x: cx, y: b.y }] : [{ x: cx, y: a.y }, { x: cx, y: b.y + b.height }];
   const start = { x: a.x + a.width, y: a.y + a.height / 2 };
   const end = { x: b.x, y: b.y + b.height / 2 };
-  if (start.y === end.y) return [start, end];
   const mid = start.x + FLOW.colGap / 2 + offset;
+  const blocked = boxes.some((box) => box !== a && box !== b && box.y === b.y && box.x > a.x && box.x < b.x);
+  if (blocked) {
+    const top = b.y - 10;
+    const target = b.x + b.width / 2;
+    return [start, { x: mid, y: start.y }, { x: mid, y: top }, { x: target, y: top }, { x: target, y: b.y }];
+  }
+  if (start.y === end.y) return [start, end];
   return [start, { x: mid, y: start.y }, { x: mid, y: end.y }, end];
 }
 
@@ -120,7 +128,7 @@ export function flowLayout(input: LaneStep[]): FlowLayout {
     // Each side route through a gap runs a little further right, so no two routes share a line.
     const used = isSide(step.kind) ? (sideRoutes.get(a.x) ?? 0) + 1 : 0;
     if (used) sideRoutes.set(a.x, used);
-    edges.push({ id: `${a.id}->${b.id}`, from: a.id, to: b.id, kind: step.kind, points: route(a, b, used * 7) });
+    edges.push({ id: `${a.id}->${b.id}`, from: a.id, to: b.id, kind: step.kind, points: route(a, b, 16 * used / (used + 1), steps) });
   });
 
   const last = lanes.at(-1);

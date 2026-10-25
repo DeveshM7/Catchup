@@ -58,6 +58,7 @@ export class Preview {
   private timer: NodeJS.Timeout | undefined;
   private running = false;
   private again = false;
+  private stopped = false;
   private watcher: FSWatcher | undefined;
   private watching: Promise<void> = Promise.resolve();
 
@@ -72,6 +73,7 @@ export class Preview {
 
   /** Starts watching (and runs once, so the view isn't empty before the first save). */
   start(): void {
+    if (this.stopped || this.watcher) return;
     this.watcher = watch(this.inputs.repoRoot, {
       ignoreInitial: true,
       ignored: (path: string) => IGNORED.test(relative(this.inputs.repoRoot, path)),
@@ -88,16 +90,20 @@ export class Preview {
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
+    this.again = false;
     clearTimeout(this.timer);
     await this.watcher?.close();
   }
 
   private schedule(): void {
+    if (this.stopped) return;
     clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.run(), this.debounceMs);
   }
 
   async run(): Promise<void> {
+    if (this.stopped) return;
     if (this.running) {
       this.again = true;
       return;

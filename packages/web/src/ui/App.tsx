@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MapData, TreeData } from "../shared/types";
 import { answerScope, FAMILIARITIES, canOpen, codeName, panelText, pathTo, selectionScope, type Familiarity, type Selection } from "../shared/view";
-import { api, setWorkingTree } from "./api";
+import { api } from "./api";
 import { ArchCanvas } from "./ArchCanvas";
 import { AskPanel, type Turn } from "./AskPanel";
 import { Canvas } from "./Canvas";
@@ -65,6 +65,7 @@ export function App() {
   const [draft, setDraft] = useState<{ text: string; at: number } | null>(null);
   const [litTurn, setLitTurn] = useState<Turn | null>(null);
   const preview = usePreview(route.view === "preview");
+  const [previewLevel, setPreviewLevel] = useState("root");
   const [hasTimelapse, setHasTimelapse] = useState(false);
   const [timelapseStep, setTimelapseStep] = useState<TimelapseStep | null>(null);
   useEffect(() => {
@@ -86,10 +87,12 @@ export function App() {
   const sel = stack.at(-1);
   // On the Preview tab the detail panel shows the working tree: new files and boxes, and source as saved.
   const onPreview = route.view === "preview" && Boolean(preview?.tree);
-  const panelData = onPreview && preview?.tree ? preview.tree : data;
-  setWorkingTree(onPreview);
+  const currentData = onPreview && preview?.tree ? preview.tree : data;
+  // Removed citations still resolve against HEAD; new ones resolve against the working tree.
+  const panelData = sel && (sel.kind === "fn" ? !currentData.refs[sel.id] : sel.kind === "file" ? !currentData.files[sel.path] : sel.kind === "node" ? !currentData.nodes[sel.id] : false) ? data : currentData;
+  const citationData = onPreview ? { ...currentData, nodes: { ...data.nodes, ...currentData.nodes }, refs: { ...data.refs, ...currentData.refs }, files: { ...data.files, ...currentData.files } } : data;
   // A selected box wins; otherwise the answer last lit shows what it cites (Build 5).
-  const scope = sel || !litTurn?.reply ? selectionScope(sel, data) : answerScope(litTurn.reply, data);
+  const scope = sel || !litTurn?.reply ? selectionScope(sel, panelData) : answerScope(litTurn.reply, citationData);
   const askAbout = (id: string | null): void => {
     setAbout(id);
     setAsking(true);
@@ -102,6 +105,10 @@ export function App() {
 
   const targetOf = (id: string): Route => (data.nodes[id]?.kind === "part" ? { view: "arch", id } : { view: "flows", id });
   const open = async (id: string): Promise<void> => {
+    if (onPreview && currentData.nodes[id]?.kind === "part") {
+      setPreviewLevel(id);
+      return;
+    }
     const node = data.nodes[id];
     if (!node || !canOpen(node) || opening) return;
     if (node.children !== "unopened") return go(targetOf(id));
@@ -136,8 +143,8 @@ export function App() {
   );
 
   return (
-    <div className={`app ${asking ? "asking" : ""}`}>
-      <aside className="sidebar">
+    <div className={`app ${asking ? "asking" : ""} ${sel ? "has-detail" : ""}`}>
+      <aside className="sidebar" aria-label="Repository navigation">
         <button className="brand" onClick={() => go({ view: "home" })}>
           <span className="logo">◆</span> Catchup
         </button>
@@ -203,7 +210,7 @@ export function App() {
               </span>
             ))}
           </div>
-          <Search data={data} onPick={select} />
+          <Search data={currentData} onPick={select} />
           <button className={`ghost ask-toggle ${asking ? "active" : ""}`} onClick={() => setAsking(!asking)}>Ask</button>
         </div>
 
@@ -251,11 +258,17 @@ export function App() {
             </div>
           </div>
         )}
+        {route.view === "flows" && !flowParent && (
+          <div className="center-note">No main journeys in this snapshot. Explore Architecture or the other flows in the sidebar.</div>
+        )}
 
         {route.view === "map" && <FullMap />}
 
         {route.view === "preview" && (
           <PreviewPage
+            level={previewLevel}
+            onOpen={setPreviewLevel}
+            scope={scope}
             view={preview}
             mode={mode}
             selected={selectedBox}
@@ -272,18 +285,18 @@ export function App() {
       </main>
 
       {sel && (
-        <aside className="detail">
+        <aside className="detail" aria-label="Code details">
           <div className="panel-bar">
             {stack.length > 1 ? <button className="link-text" onClick={() => setStack((s) => s.slice(0, -1))}>← Back</button> : <span />}
             <button className="close" onClick={() => select(null)} title="Close">×</button>
           </div>
-          <Panel sel={sel} data={panelData} mode={mode} onSelect={push} onOpen={open} onAsk={askAbout} />
+          <Panel sel={sel} data={panelData} mode={mode} onSelect={push} onOpen={open} onAsk={askAbout} {...(onPreview && panelData === currentData ? { previewVersion: preview?.updatedAt ?? "" } : {})} />
         </aside>
       )}
 
       {asking && (
         <AskPanel
-          data={data}
+          data={citationData}
           mode={mode}
           turns={turns}
           setTurns={setTurns}
@@ -342,10 +355,12 @@ function OpeningNote({ opening }: { opening: Opening }) {
 /** Every folder group and system (D19), kept as an option next to the tree. */
 function FullMap() {
   const [map, setMap] = useState<MapData | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => {
-    api.map().then(setMap, () => setMap(null));
+    api.map().then(setMap, (e: unknown) => setError(String(e)));
   }, []);
+  if (error) return <div className="center-note">Could not load the map: {error}</div>;
   if (!map) return <div className="center-note">Loading…</div>;
   const node = map.map.nodes.find((n) => n.id === selected);
   return (

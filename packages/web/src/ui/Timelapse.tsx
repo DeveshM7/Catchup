@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { MapGraph, MapNode, TimelapseFrame, TimelapseView } from "../shared/types";
+import type { MapNode, TimelapseView } from "../shared/types";
+import { frameGraph, nodeBounds } from "../shared/timelapse";
 import { api } from "./api";
-import { Canvas } from "./Canvas";
+import { Canvas, type Bounds } from "./Canvas";
 import { GraphView, Legend, NodeIcon } from "./GraphView";
 
 const STEP_MS = 2600;
@@ -12,20 +13,6 @@ export type TimelapseStep = { from: string; to: string; label: string };
 type Props = { onStep: (step: TimelapseStep | null) => void };
 
 const short = (sha: string): string => sha.slice(0, 7);
-
-/** The union layout with this frame's boxes: present ones carry their status, ones that just left fade, the rest hide. */
-function frameGraph(layout: MapGraph, frame: TimelapseFrame): { graph: MapGraph; status: Map<string, string> } {
-  const present = new Map(frame.nodes.map((n) => [n.id, n]));
-  const removed = new Set(frame.removed);
-  const edges = new Set(frame.edges);
-  const status = new Map<string, string>();
-  const nodes: MapNode[] = layout.nodes.map((n) => {
-    const now = present.get(n.id);
-    status.set(n.id, now ? (now.status === "same" ? "" : now.status) : removed.has(n.id) ? "removed" : "hidden");
-    return now ? { ...n, label: now.title, description: now.short } : n;
-  });
-  return { graph: { ...layout, nodes, edges: layout.edges.filter((e) => edges.has(e.id)) }, status };
-}
 
 function body(n: MapNode) {
   return (
@@ -43,6 +30,8 @@ export function TimelapsePage({ onStep }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [focus, setFocus] = useState<Bounds | undefined>();
 
   useEffect(() => {
     api.timelapses().then(
@@ -71,7 +60,7 @@ export function TimelapsePage({ onStep }: Props) {
     onStep(frame && prev ? { from: prev.sha, to: frame.sha, label: `${short(prev.sha)} → ${short(frame.sha)}` } : null);
   }, [frame, prev, onStep]);
 
-  const drawn = useMemo(() => (view && frame ? frameGraph(view.layout, frame) : null), [view, frame]);
+  const drawn = useMemo(() => (view && frame ? frameGraph(view.layout, frame, prev) : null), [view, frame, prev]);
 
   if (error) return <div className="center-note">Could not load the timelapse: {error}</div>;
   if (!list) return <div className="center-note">Loading…</div>;
@@ -79,31 +68,40 @@ export function TimelapsePage({ onStep }: Props) {
     return list.length === 0 ? <div className="center-note">No timelapse yet; run: catchup timelapse &lt;path&gt;</div> : <div className="center-note">Loading…</div>;
   }
   const s = frame.step;
+  const selectedNode = drawn.graph.nodes.find((n) => n.id === selected);
   return (
     <div className="timelapse">
       <div className="tl-stage">
+        <div className="tl-toolbar">
+          <button className="ghost small" onClick={() => setFocus(nodeBounds(drawn.graph.nodes))}>Fit this frame</button>
+          <button className="ghost small" onClick={() => setFocus(undefined)}>Fit all history</button>
+          <span className="muted small">Fixed box positions · click a box for details</span>
+        </div>
         <div className="canvas-wrap">
-          <Canvas width={view.layout.width} height={view.layout.height} fitKey={`${view.from}..${view.to}`}>
-            <GraphView graph={drawn.graph} active={new Set()} selected={null} onSelect={() => undefined} body={body} statusOf={(id) => drawn.status.get(id) || undefined} />
+          <Canvas width={view.layout.width} height={view.layout.height} fitKey={`${view.from}..${view.to}`} {...(focus ? { fitBounds: focus } : {})}>
+            <GraphView graph={drawn.graph} active={new Set()} selected={selectedNode?.id ?? null} onSelect={setSelected} body={body} statusOf={(id) => drawn.status.get(id) || undefined} />
           </Canvas>
           <Legend items={[{ label: "Part of the code", slot: 1 }, { label: "Outside system", slot: -1 }]} />
         </div>
         <div className="tl-controls">
-          <button onClick={() => setIndex(0)} title="First">⏮</button>
-          <button onClick={() => setIndex((i) => Math.max(0, i - 1))} title="Back">◀</button>
+          <button onClick={() => { setPlaying(false); setIndex(0); }} title="First" disabled={index === 0}>⏮</button>
+          <button onClick={() => { setPlaying(false); setIndex((i) => Math.max(0, i - 1)); }} title="Back" disabled={index === 0}>◀</button>
           <button
             className="primary"
             onClick={() => {
               if (index >= view.frames.length - 1) setIndex(0);
+              if (!playing) setFocus(undefined);
               setPlaying(!playing);
             }}
           >
             {playing ? "Pause" : "Play"}
           </button>
-          <button onClick={() => setIndex((i) => Math.min(view.frames.length - 1, i + 1))} title="Forward">▶</button>
-          <button onClick={() => setIndex(view.frames.length - 1)} title="Last">⏭</button>
+          <button onClick={() => { setPlaying(false); setIndex((i) => Math.min(view.frames.length - 1, i + 1)); }} title="Forward" disabled={index === view.frames.length - 1}>▶</button>
+          <button onClick={() => { setPlaying(false); setIndex(view.frames.length - 1); }} title="Last" disabled={index === view.frames.length - 1}>⏭</button>
           <input
             type="range"
+            aria-label="Timelapse checkpoint"
+            aria-valuetext={`${frame.date.slice(0, 10)}, ${short(frame.sha)}`}
             min={0}
             max={view.frames.length - 1}
             value={index}
@@ -115,9 +113,18 @@ export function TimelapsePage({ onStep }: Props) {
           <span className="mono small">{index + 1} / {view.frames.length}</span>
         </div>
       </div>
-      <aside className="tl-side">
+      <aside className="tl-side" aria-label="Checkpoint details">
+        <h1>Timelapse</h1>
         <div className="kicker">{frame.date.slice(0, 10)} · {short(frame.sha)}{frame.tags.length ? ` · ${frame.tags.join(", ")}` : ""}</div>
         <div className="muted small">{frame.subject}</div>
+        {selectedNode && (
+          <section className="tl-selected">
+            <h2>{selectedNode.label}</h2>
+            <p>{selectedNode.description}</p>
+            {drawn.status.get(selectedNode.id) === "removed" && <p className="muted small">Removed since the previous checkpoint.</p>}
+            <button className="link-text small" onClick={() => setFocus(nodeBounds([selectedNode]))}>Zoom to this box</button>
+          </section>
+        )}
         {s ? (
           <>
             <h2 className="tl-caption">{s.caption}</h2>
@@ -142,6 +149,12 @@ export function TimelapsePage({ onStep }: Props) {
             <p>{frame.summary}</p>
           </>
         )}
+        <div className="eyebrow">Boxes in this frame</div>
+        <div className="tl-boxes">
+          {frame.nodes.map((n) => (
+            <button key={n.id} className={`link-text ${n.id === selected ? "strong" : ""}`} onClick={() => setSelected(n.id)}>{n.title}</button>
+          ))}
+        </div>
         {frame.journeys.length > 0 && (
           <>
             <div className="eyebrow">Main journeys at this point</div>

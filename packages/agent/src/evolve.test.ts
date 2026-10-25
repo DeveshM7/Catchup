@@ -206,6 +206,28 @@ describe("offline evolve for the live preview (Build 7)", async () => {
     const same = diffTrees({ understanding: treeA, facts: withGuards(a.facts, 2) }, { understanding: treeA, facts: withGuards(a.facts, 2) }, new Map());
     expect(same.journeys).toEqual([]);
   });
+
+  it("does not carry opened sub-steps whose unchanged functions no longer run", async () => {
+    const journey = treeA.nodes[`journey:${SEND}`]!;
+    const first = treeA.nodes[(journey.children as string[])[0]!]!;
+    const send = { ...first, id: `${first.id}#send`, children: "leaf" as const, depth: 3 };
+    const auth = {
+      ...send, id: `${first.id}#auth`, title: "Check the user",
+      anchor: { files: ["lib/auth.ts"], functions: ["lib/auth.ts#requireUser"] },
+    };
+    const opened: Understanding = {
+      ...treeA,
+      nodes: { ...treeA.nodes, [first.id]: { ...first, children: [send.id, auth.id] }, [send.id]: send, [auth.id]: auth },
+    };
+    // The function itself is unchanged and still exists; only its call was removed from POST.
+    expect(a.facts.functions.find((f) => f.id === auth.anchor.functions[0])?.hash)
+      .toBe(b.facts.functions.find((f) => f.id === auth.anchor.functions[0])?.hash);
+    const { understanding: preview } = await evolve({
+      ...b.inputs(fakes({}).runnerFor), from: { understanding: opened, facts: a.facts }, renames, offline: true,
+    });
+    expect(preview.nodes[first.id]!.children).toBe("unopened");
+    expect(preview.nodes[auth.id]).toBeUndefined();
+  });
 });
 
 describe("placing a new file", () => {

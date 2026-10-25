@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-type Props = { width: number; height: number; children: ReactNode; fitKey: string; wheelZoom?: boolean };
+export type Bounds = { x: number; y: number; width: number; height: number };
+type Props = { width: number; height: number; children: ReactNode; fitKey: string; wheelZoom?: boolean; fitBounds?: Bounds };
 type View = { scale: number; x: number; y: number };
 
 const MAX_FIT = 1.15;
 const LEGEND_ROOM = 56;
 
 /** Pan/zoom surface for a diagram of a known size. Fits on load and whenever `fitKey` changes. */
-export function Canvas({ width, height, children, fitKey, wheelZoom = false }: Props) {
+export function Canvas({ width, height, children, fitKey, wheelZoom = false, fitBounds }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>({ scale: 1, x: 0, y: 0 });
 
@@ -15,9 +16,10 @@ export function Canvas({ width, height, children, fitKey, wheelZoom = false }: P
     const el = box.current;
     if (!el || !width || !height) return;
     // Bottom margin leaves room for the legend.
-    const scale = Math.min(MAX_FIT, (el.clientWidth - 32) / width, (el.clientHeight - 16 - LEGEND_ROOM) / height);
-    setView({ scale, x: (el.clientWidth - width * scale) / 2, y: Math.max(16, (el.clientHeight - LEGEND_ROOM - height * scale) / 2) });
-  }, [width, height]);
+    const bounds = fitBounds ?? { x: 0, y: 0, width, height };
+    const scale = Math.max(0.05, Math.min(MAX_FIT, (el.clientWidth - 32) / bounds.width, (el.clientHeight - 16 - LEGEND_ROOM) / bounds.height));
+    setView({ scale, x: (el.clientWidth - bounds.width * scale) / 2 - bounds.x * scale, y: Math.max(16, (el.clientHeight - LEGEND_ROOM - bounds.height * scale) / 2) - bounds.y * scale });
+  }, [width, height, fitBounds]);
 
   useEffect(() => {
     fit();
@@ -49,7 +51,7 @@ export function Canvas({ width, height, children, fitKey, wheelZoom = false }: P
   }, [wheelZoom]);
 
   const onPointerDown = (e: React.PointerEvent): void => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
+    if (e.button !== 0 || (e.target as Element).closest("button, [role=button]")) return;
     const start = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
     const move = (ev: PointerEvent): void => setView((v) => ({ ...v, x: start.vx + ev.clientX - start.x, y: start.vy + ev.clientY - start.y }));
     const up = (): void => {
@@ -66,7 +68,7 @@ export function Canvas({ width, height, children, fitKey, wheelZoom = false }: P
       <div className="canvas-inner" style={{ width, height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
         {children}
       </div>
-      <div className="zoom">
+      <div className="zoom" onClick={(e) => e.stopPropagation()}>
         <button onClick={() => zoomAt(1.2, ...center())} title="Zoom in">+</button>
         <button onClick={() => zoomAt(1 / 1.2, ...center())} title="Zoom out">−</button>
         <button onClick={fit} title="Fit">⤢</button>

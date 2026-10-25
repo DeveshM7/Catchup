@@ -77,7 +77,7 @@ function Cites({ reply, data, mode, onSelect }: { reply: AskReply; data: TreeDat
     return node ? (mode === "expert" ? codeName(node, data) : node.title) : id;
   };
   return (
-    <div className="chips cites">
+    <div className="chips cites" onClick={(e) => e.stopPropagation()}>
       {reply.nodes.map((id) => (
         <button key={id} className="chip link" onClick={() => onSelect({ kind: "node", id })}>{name(id)}</button>
       ))}
@@ -151,7 +151,7 @@ export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onL
 
   const aboutNode = about ? data.nodes[about] : undefined;
   return (
-    <aside className="ask">
+    <aside className="ask" aria-label="Ask">
       <div className="panel-bar">
         <strong>{change ? "Ask about the changes" : "Ask about the code"}</strong>
         <button className="close" onClick={onClose} title="Close">×</button>
@@ -205,6 +205,8 @@ export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onL
           </div>
         )}
         <textarea
+          aria-label="Question"
+          maxLength={2000}
           value={question}
           placeholder={change ? "What do these changes do? What could they break?" : aboutNode ? `Ask about “${aboutNode.title}”…` : "How does sending a message work?"}
           rows={3}

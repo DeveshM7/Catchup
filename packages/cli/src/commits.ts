@@ -10,7 +10,7 @@ import { CATCHUP_DIR, loadFacts, loadSignals, loadSnapshot, loadUnderstanding, s
 export type Workspace = {
   /** The repository; `.catchup/` lives here. */
   repoRoot: string;
-  /** The code at `sha`: the repo itself for HEAD, else a temporary worktree. */
+  /** The code at `sha`, in an isolated temporary worktree. */
   dir: string;
   sha: string;
   facts: Facts;
@@ -35,9 +35,9 @@ export function readReadme(dir: string): string | undefined {
   return undefined;
 }
 
-/** Runs `fn` with the code at `sha`: in place for HEAD (the working tree, as `init` always did), else in a worktree. */
+/** Reads the committed code even at HEAD; uncommitted changes belong only to Preview (D6). */
 export async function withCode<T>(repoRoot: string, sha: string, fn: (dir: string) => Promise<T>): Promise<T> {
-  return sha === headSha(repoRoot) ? fn(repoRoot) : withWorktree(repoRoot, sha, fn);
+  return withWorktree(repoRoot, sha, fn);
 }
 
 /** Analyzes the code in `dir` as commit `sha` and saves facts, snapshot and signals under the repo. */
@@ -56,7 +56,11 @@ export function loadWorkspace(repoRoot: string, dir: string, sha: string): Works
   const facts = loadFacts(repoRoot, sha);
   const snapshot = loadSnapshot(repoRoot, sha);
   const trees = buildCallTrees(facts, snapshot);
-  const signals = loadSignals(repoRoot, sha) ?? computeSignals({ facts, trees, churn: fileChurn(dir, sha), readme: readReadme(dir) });
+  let signals = loadSignals(repoRoot, sha);
+  if (!signals) {
+    signals = computeSignals({ facts, trees, churn: fileChurn(dir, sha), readme: readReadme(dir) });
+    saveSignals(repoRoot, signals);
+  }
   return { repoRoot, dir, sha, facts, snapshot, trees, signals };
 }
 

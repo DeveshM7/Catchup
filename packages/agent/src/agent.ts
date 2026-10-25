@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { basename, isAbsolute, relative, resolve } from "node:path";
 import { createSession, OutputFormatType, ReasoningEffort, ToolConfirmationOutcome } from "@factory/droid-sdk/node";
 import { DEFAULT_MODEL, type Runner, type RunResult } from "./droid.js";
@@ -74,6 +75,15 @@ function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
+function realPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    // Missing files cannot be read; still apply the lexical boundary check.
+    return path;
+  }
+}
+
 /** Why a tool use is not allowed, or undefined when it is: read tools only, inside the roots, no secrets. */
 export function toolProblem(use: ToolUseRequest, cwd: string, roots: string[]): string | undefined {
   if (INERT_TOOLS.includes(use.name)) return undefined;
@@ -82,8 +92,11 @@ export function toolProblem(use: ToolUseRequest, cwd: string, roots: string[]): 
     for (const value of strings(use.input[key])) {
       const path = resolve(cwd, value);
       if (!inside(path, roots)) return `${use.name} outside the repository: ${value}`;
-      const name = basename(path);
-      if (SECRET_FILE.test(name) && !NOT_SECRET.test(name)) return `${use.name} of a secrets file: ${value}`;
+      const real = realPath(path);
+      if (!inside(real, roots.map(realPath))) return `${use.name} outside the repository: ${value}`;
+      for (const name of [basename(path), basename(real)]) {
+        if (SECRET_FILE.test(name) && !NOT_SECRET.test(name)) return `${use.name} of a secrets file: ${value}`;
+      }
     }
   }
   for (const key of PATTERN_KEYS) {

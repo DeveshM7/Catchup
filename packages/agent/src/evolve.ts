@@ -170,13 +170,17 @@ function evolveParts(work: Work, before: Understanding, map: Remap): { parts: st
 }
 
 /** Copies a node's opened subtree when every function it cites still exists, remapped; else marks it unopened. */
-function carrySubtree(work: Work, before: Understanding, node: UnderstandingNode, map: Remap): UnderstandingNode["children"] {
+function carrySubtree(work: Work, before: Understanding, node: UnderstandingNode, map: Remap, tree: CallTree): UnderstandingNode["children"] {
   if (!Array.isArray(node.children)) return node.children;
-  const ok = (id: string): boolean => {
+  const allowedUnder = (parent: UnderstandingNode): Set<string> => subtreeFunctions(tree, parent.anchor.functions.flatMap((f) => map.fn(f) ?? []));
+  const ok = (id: string, allowed: Set<string>): boolean => {
     const child = before.nodes[id];
-    return child !== undefined && child.anchor.functions.every((f) => map.fn(f) !== undefined && !map.changed(f)) && (!Array.isArray(child.children) || child.children.every(ok));
+    return child !== undefined
+      && child.anchor.functions.every((f) => allowed.has(map.fn(f) ?? "") && !map.changed(f))
+      && (!Array.isArray(child.children) || child.children.every((c) => ok(c, allowedUnder(child))));
   };
-  if (!node.children.every(ok)) return "unopened";
+  const allowed = allowedUnder(node);
+  if (!node.children.every((id) => ok(id, allowed))) return "unopened";
   const copy = (id: string): void => {
     const child = before.nodes[id]!;
     const functions = child.anchor.functions.map((f) => map.fn(f)!);
@@ -209,7 +213,7 @@ function evolveJourney(work: Work, before: Understanding, id: string, map: Remap
   if (problems.length === 0 && touched.size === 0) {
     node.children = steps.map((s) => {
       const functions = s.anchor.functions.map((f) => map.fn(f)!);
-      work.nodes[s.id] = { ...s, anchor: { files: sorted(functions.map(fileOf)), functions }, parts: sorted(functions.flatMap((f) => topPartOf(work, parts)(fileOf(f)) ?? [])), systems: systemsOfFunctions(work, functions), children: carrySubtree(work, before, s, map) };
+      work.nodes[s.id] = { ...s, anchor: { files: sorted(functions.map(fileOf)), functions }, parts: sorted(functions.flatMap((f) => topPartOf(work, parts)(fileOf(f)) ?? [])), systems: systemsOfFunctions(work, functions), children: carrySubtree(work, before, s, map, tree) };
       work.taken.add(s.id);
       return s.id;
     });
@@ -290,7 +294,7 @@ function buildUpdatedSteps(work: Work, before: Understanding, plan: JourneyPlan,
       parts: sorted(functions.flatMap((f) => partOf(fileOf(f)) ?? [])),
       systems: systemsOfFunctions(work, functions),
       stepKind: keepText ? (old.stepKind ?? s.kind) : s.kind,
-      children: keepText ? carrySubtree(work, before, old, map) : s.open && big && journey.depth + 1 < MAX_DEPTH ? "unopened" : "leaf",
+      children: keepText ? carrySubtree(work, before, old, map, plan.tree) : s.open && big && journey.depth + 1 < MAX_DEPTH ? "unopened" : "leaf",
       depth: journey.depth + 1,
       basis: keepText ? old.basis : basis,
     };

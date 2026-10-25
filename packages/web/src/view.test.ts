@@ -33,6 +33,7 @@ describe("familiarity (D40)", () => {
   });
 
   it("names a part by the folder that holds its files", () => {
+    expect(folderName([])).toBe("");
     expect(folderName(["lib/db/a.ts", "lib/db/b/c.ts"])).toBe("lib/db/");
     expect(folderName(["one.ts"])).toBe("one.ts");
     expect(folderName(["app/a.ts", "app/b.ts", "lib/c.ts", "proxy.ts"])).toBe("app/, ./, lib/");
@@ -73,6 +74,8 @@ describe("Ask (Build 5)", () => {
     expect(parseAsk(JSON.stringify({ question: "Why?", node: "" }))).toEqual({ question: "Why?" });
     expect(() => parseAsk(JSON.stringify({ question: "   " }))).toThrow(/question must be/);
     expect(() => parseAsk("not json")).toThrow();
+    expect(() => parseAsk("null")).toThrow("JSON object");
+    expect(() => parseAsk("[]")).toThrow("JSON object");
   });
 });
 

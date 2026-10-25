@@ -99,7 +99,12 @@ export function StepsCanvas({ parent, data, mode, scope, selected, onSelect, onO
                   if (opens) onOpen(step.id);
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") onSelect(step.id);
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onSelect(step.id);
+                  }
                 }}
               >
                 <span className="step-top">
@@ -145,6 +150,13 @@ export function StepsCanvas({ parent, data, mode, scope, selected, onSelect, onO
                 onClick={(e) => {
                   e.stopPropagation();
                   if (data.nodes[box.id]) onSelect(box.id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (data.nodes[box.id]) onSelect(box.id);
+                  }
                 }}
               >
                 <span className="node-title"><NodeIcon kind="external" />{systemName(box.id, data)}</span>

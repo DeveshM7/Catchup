@@ -63,6 +63,8 @@ export type EntryPointFact = {
 
 export type Facts = {
   sha: string;
+  /** Absent in legacy caches (v1); hashes must be migrated before comparison. */
+  hashVersion?: number;
   files: FileFact[];
   functions: FunctionFact[];
   imports: ImportFact[];

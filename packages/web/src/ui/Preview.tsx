@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { ChangeSetView, JourneyChangeView, PreviewView, TreeData } from "../shared/types";
-import type { Familiarity, Selection } from "../shared/view";
+import { pathTo, type Familiarity, type Selection, type Scope } from "../shared/view";
 import { api } from "./api";
 import { ArchCanvas } from "./ArchCanvas";
 
@@ -17,7 +17,12 @@ export function usePreview(active: boolean): PreviewView | null {
     const tick = async (): Promise<void> => {
       try {
         const next = await api.preview();
-        if (live) setView(next);
+        if (live) setView((previous) => {
+          if (previous?.updatedAt === next.updatedAt && previous.runs === next.runs) {
+            return { ...next, tree: previous.tree, changes: previous.changes };
+          }
+          return next;
+        });
       } catch {
         // the server restarts or is busy; try again on the next tick
       }
@@ -115,10 +120,13 @@ type Props = {
   onSelect: (sel: Selection | null) => void;
   /** Opens Ask about the uncommitted changes, optionally with a question in the box. */
   onAsk: (text?: string) => void;
+  level: string;
+  onOpen: (id: string) => void;
+  scope: Scope;
 };
 
 /** Uncommitted changes as they will land (Build 7): behavior first, then the parts touched, then every file and box. */
-export function PreviewPage({ view, mode, selected, onSelect, onAsk }: Props) {
+export function PreviewPage({ view, mode, selected, onSelect, onAsk, level, onOpen, scope }: Props) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
@@ -144,18 +152,18 @@ export function PreviewPage({ view, mode, selected, onSelect, onAsk }: Props) {
         {view.error && <p className="ask-error">Could not analyze the working tree: {view.error}</p>}
         {empty && !view.error && <p className="lead">No changes to the code since HEAD. Save a file and this page updates within a few seconds.</p>}
       </header>
-      {c && !empty && tree && <Changes c={c} tree={tree} mode={mode} version={view.updatedAt ?? ""} selected={selected} onSelect={onSelect} onAsk={onAsk} />}
+      {c && !empty && tree && <Changes c={c} tree={tree} mode={mode} version={view.updatedAt ?? ""} selected={selected} onSelect={onSelect} onAsk={onAsk} level={level} onOpen={onOpen} scope={scope} />}
     </div>
   );
 }
 
 type ChangesProps = Omit<Props, "view"> & { c: ChangeSetView; tree: TreeData; version: string };
 
-function Changes({ c, tree, mode, version, selected, onSelect, onAsk }: ChangesProps) {
+function Changes({ c, tree, mode, version, selected, onSelect, onAsk, level: requestedLevel, onOpen, scope: selectedScope }: ChangesProps) {
   // The canvas opens like Architecture's (parts → sub-parts → files), inside the preview's own tree.
-  const [path, setPath] = useState<string[]>([]);
-  const trail = path.filter((id) => tree.nodes[id]);
+  const trail = pathTo(requestedLevel, tree).filter((n) => n.kind === "part").map((n) => n.id);
   const level = trail.at(-1) ?? "root";
+  const loadCanvas = useCallback((id: string) => api.previewCanvas(id, version), [version]);
   const pick = (box: string | null): void => {
     if (!box) return onSelect(null);
     if (box.startsWith("file:")) return onSelect({ kind: "file", path: box.slice("file:".length) });
@@ -163,7 +171,7 @@ function Changes({ c, tree, mode, version, selected, onSelect, onAsk }: ChangesP
   };
   const openBox = (id: string): void => {
     const node = tree.nodes[id];
-    if (node?.kind === "part") setPath([...trail, id]);
+    if (node?.kind === "part") onOpen(id);
   };
   const touchedFiles = new Set([...c.files.added, ...c.files.changed, ...c.files.renamed.map((r) => r.to)]);
   const added = new Set(c.nodes.added.map((n) => n.id));
@@ -174,7 +182,9 @@ function Changes({ c, tree, mode, version, selected, onSelect, onAsk }: ChangesP
     const files = box.startsWith("file:") ? [box.slice("file:".length)] : (tree.nodes[box]?.files ?? []);
     return files.some((f) => touchedFiles.has(f)) ? "touched" : undefined;
   };
-  const scope = { files: touchedFiles, systems: new Set(c.systems.added.map((s) => `system:${s}`)) };
+  const scope = selectedScope.files.size || selectedScope.systems.size || selectedScope.nodes?.size
+    ? selectedScope
+    : { files: touchedFiles, systems: new Set(c.systems.added.map((s) => `system:${s}`)) };
   return (
     <>
       {c.journeys.length > 0 && (
@@ -206,7 +216,7 @@ function Changes({ c, tree, mode, version, selected, onSelect, onAsk }: ChangesP
           {["root", ...trail].map((id, i) => (
             <span key={id} className="crumb-wrap">
               {i > 0 && <span className="sep">/</span>}
-              <button className={`crumb ${i === trail.length ? "last" : ""}`} onClick={() => setPath(trail.slice(0, i))}>{id === "root" ? "All parts" : tree.nodes[id]!.title}</button>
+              <button className={`crumb ${i === trail.length ? "last" : ""}`} onClick={() => onOpen(id)}>{id === "root" ? "All parts" : tree.nodes[id]!.title}</button>
             </span>
           ))}
         </div>
@@ -219,7 +229,7 @@ function Changes({ c, tree, mode, version, selected, onSelect, onAsk }: ChangesP
             selected={selected}
             onSelect={pick}
             onOpen={openBox}
-            load={(id) => api.previewCanvas(id, version)}
+            load={loadCanvas}
             statusOf={statusOf}
           />
         </div>

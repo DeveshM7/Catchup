@@ -99,7 +99,10 @@ export async function pool(tasks: (() => Promise<void>)[], limit: number): Promi
   const workers = Array.from({ length: Math.min(limit, tasks.length) }, async () => {
     while (next < tasks.length) await tasks[next++]!();
   });
-  await Promise.all(workers);
+  // A failed pass must not return while other passes can still finish (and be saved by the caller).
+  const results = await Promise.allSettled(workers);
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
 }
 
 export const sorted = (values: Iterable<string>): string[] => [...new Set(values)].sort();

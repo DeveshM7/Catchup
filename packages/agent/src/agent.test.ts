@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { agentRunner, DISABLED_TOOLS, READ_TOOLS, toolProblem, type AgentEvent, type AgentSession, type OpenSession, type PassLog, type SessionOptions } from "./agent.js";
 
@@ -69,6 +72,28 @@ describe("toolProblem", () => {
     expect(toolProblem({ name: "Read", input: { file_path: ".env.local" } }, repo, [repo])).toMatch(/secrets/);
     expect(toolProblem({ name: "Read", input: { file_path: ".env.example" } }, repo, [repo])).toBeUndefined();
     expect(toolProblem({ name: "Glob", input: { patterns: ["../**/*.ts"] } }, repo, [repo])).toMatch(/leaves/);
+  });
+
+  it("checks symlink targets for repository escapes and secret aliases", () => {
+    const temp = mkdtempSync(join(tmpdir(), "catchup-permissions-"));
+    const root = join(temp, "repo");
+    mkdirSync(root);
+    writeFileSync(join(temp, "outside.txt"), "synthetic outside content");
+    writeFileSync(join(root, ".env"), "synthetic secret");
+    writeFileSync(join(root, "safe.ts"), "safe content");
+    symlinkSync(join(temp, "outside.txt"), join(root, "escape.txt"));
+    symlinkSync(join(root, ".env"), join(root, "config.txt"));
+    symlinkSync(join(root, "safe.ts"), join(root, "linked.ts"));
+    symlinkSync(root, join(temp, "alias"));
+    try {
+      expect(toolProblem({ name: "Read", input: { file_path: "escape.txt" } }, root, [root])).toMatch(/outside/);
+      expect(toolProblem({ name: "Read", input: { file_path: "config.txt" } }, root, [root])).toMatch(/secrets/);
+      expect(toolProblem({ name: "Read", input: { file_path: "linked.ts" } }, root, [root])).toBeUndefined();
+      const alias = join(temp, "alias");
+      expect(toolProblem({ name: "Read", input: { file_path: "safe.ts" } }, alias, [alias])).toBeUndefined();
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
   });
 });
 

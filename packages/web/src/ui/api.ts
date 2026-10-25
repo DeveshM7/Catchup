@@ -22,12 +22,8 @@ const calls = new Map<string, Promise<TreeView>>();
 const sources = new Map<string, Promise<SourceView>>();
 const q = encodeURIComponent;
 
-/** On the Preview tab, panels read the working tree's code (call trees, source), not HEAD's; it changes on every save, so it isn't cached. */
-let workingTree = false;
-export function setWorkingTree(on: boolean): void {
-  workingTree = on;
-}
-const fromCode = <T>(cache: Map<string, Promise<T>>, key: string, path: string): Promise<T> =>
+/** Working-tree requests are explicit and uncached; HEAD requests remain stable. */
+const fromCode = <T>(cache: Map<string, Promise<T>>, key: string, path: string, workingTree: boolean): Promise<T> =>
   workingTree ? request(`${path}&preview=1`) : cached(cache, key, () => request(path));
 
 export const api = {
@@ -39,9 +35,9 @@ export const api = {
     canvases.clear();
     return data;
   },
-  entryCalls: (entry: string): Promise<TreeView> => fromCode(calls, `entry:${entry}`, `/api/calls?entry=${q(entry)}`),
-  fnCalls: (fn: string, entry?: string): Promise<TreeView> => fromCode(calls, `fn:${fn}:${entry ?? ""}`, `/api/calls?fn=${q(fn)}${entry ? `&entry=${q(entry)}` : ""}`),
-  source: (fn: string): Promise<SourceView> => fromCode(sources, fn, `/api/source?fn=${q(fn)}`),
+  entryCalls: (entry: string, workingTree = false): Promise<TreeView> => fromCode(calls, `entry:${entry}`, `/api/calls?entry=${q(entry)}`, workingTree),
+  fnCalls: (fn: string, entry?: string, workingTree = false): Promise<TreeView> => fromCode(calls, `fn:${fn}:${entry ?? ""}`, `/api/calls?fn=${q(fn)}${entry ? `&entry=${q(entry)}` : ""}`, workingTree),
+  source: (fn: string, workingTree = false): Promise<SourceView> => fromCode(sources, fn, `/api/source?fn=${q(fn)}`, workingTree),
   map: (): Promise<MapData> => request("/api/map"),
   /** Stored timelapses (Build 9), oldest file name first. */
   timelapses: (): Promise<{ from: string; to: string }[]> => request("/api/timelapses"),
@@ -56,13 +52,26 @@ export const api = {
     if (!res.ok || !res.body) throw new Error(`ask failed: ${res.status}`);
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = "";
-    for (;;) {
-      const { value, done } = await reader.read();
-      buffer += value ?? "";
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) if (line.trim()) onEvent(JSON.parse(line) as AskEvent);
-      if (done) break;
+    let finished = false;
+    const emit = (line: string): void => {
+      if (!line.trim()) return;
+      const event = JSON.parse(line) as AskEvent;
+      if (event.type === "answer" || event.type === "error") finished = true;
+      onEvent(event);
+    };
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        buffer += value ?? "";
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        lines.forEach(emit);
+        if (done) break;
+      }
+      emit(buffer);
+      if (!finished) throw new Error("The answer stream ended early. Please try again.");
+    } finally {
+      reader.releaseLock();
     }
   },
 };

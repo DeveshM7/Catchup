@@ -57,6 +57,13 @@ describe("checkAnswer", () => {
     expect(checkAnswer({ answer: "x", cites: [] }, facts, u)).toEqual(["expected 1–8 cites, got 0"]);
     expect(checkAnswer({ answer: Array(221).fill("w").join(" "), cites: ["lib/db.ts"] }, facts, u)).toEqual(["answer has 221 words (at most 150)"]);
   });
+
+  it("does not treat inherited object properties as grounded box citations", () => {
+    for (const cite of ["constructor", "toString", "__proto__"]) {
+      expect(checkAnswer({ answer: "x", cites: [cite] }, facts, u)).toHaveLength(1);
+      expect(splitCites([cite], facts, u).nodes).toEqual([]);
+    }
+  });
 });
 
 describe("askQuestion", () => {
@@ -120,6 +127,24 @@ describe("asking about a change (Build 8)", () => {
     ]);
     const { runner } = fake([{ answer: "The check was dropped in 45be7e5.", cites: ["45be7e5", "app/api/chat/route.ts"] }]);
     expect(await askQuestion({ ...base(runner), changes })).toMatchObject({ commits: [sha], files: ["app/api/chat/route.ts"] });
+  });
+
+  it("briefs a preview selection from the newer tree while retaining removed-code citations", async () => {
+    const cache = node("part:lib/cache.ts", "part", "Cache", ["lib/cache.ts"]);
+    const after = {
+      facts: { ...facts, files: [{ path: "lib/cache.ts", lang: "typescript" as const, loc: 10 }], functions: [fn("lib/cache.ts#cache")] },
+      understanding: { ...u, parts: [cache.id], journeys: [], systems: [], nodes: { [cache.id]: cache } },
+    };
+    const { runner } = fake([{ answer: "Cache replaces the database.", cites: [cache.id, "lib/cache.ts#cache", "lib/cache.ts", "lib/db.ts"] }]);
+    const inputs = { ...base(runner), node: cache.id, changes: { ...changes, after } };
+    const prompt = askPrompt(inputs);
+    expect(prompt).toContain("- [part:lib/cache.ts] Cache:");
+    expect(prompt).toContain("The question is about this box: [part:lib/cache.ts] Cache");
+    expect(prompt).toContain("Its files (1): lib/cache.ts");
+    expect(askPrompt({ ...inputs, node: "part:lib/db.ts" })).toContain("The question is about this box: [part:lib/db.ts] Database");
+    expect(await askQuestion(inputs)).toMatchObject({
+      nodes: [cache.id], functions: ["lib/cache.ts#cache"], files: ["lib/cache.ts", "lib/db.ts"],
+    });
   });
 });
 

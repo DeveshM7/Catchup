@@ -14,6 +14,8 @@ type Props = {
   onOpen: (id: string) => void;
   /** Opens the Ask chat about a box (Build 5). */
   onAsk?: (id: string) => void;
+  /** Refresh source and calls only when the preview result changes. */
+  previewVersion?: string;
 };
 
 const KIND = { part: "Part of the code", system: "Outside system", journey: "Journey", step: "Step" } as const;
@@ -36,7 +38,7 @@ function stepLabel(node: NodeView, data: TreeData): string {
   return `Step ${index}${kind}`;
 }
 
-function NodePanel({ node, data, mode, onSelect, onOpen, onAsk }: Props & { node: NodeView }) {
+function NodePanel({ node, data, mode, onSelect, onOpen, onAsk, previewVersion }: Props & { node: NodeView }) {
   const text = panelText(node, mode);
   const title = mode === "expert" ? codeName(node, data) : node.title;
   const entry = journeyOf(node.id, data)?.entry;
@@ -44,7 +46,7 @@ function NodePanel({ node, data, mode, onSelect, onOpen, onAsk }: Props & { node
   const steps = node.kind === "journey" && Array.isArray(node.children) ? node.children.flatMap((id) => data.nodes[id] ?? []) : [];
   const parts = node.kind === "journey" || node.kind === "step" ? partsOf(node, data) : [];
   const uses = node.kind === "part" || node.kind === "system" ? usedIn(node.files, data) : [];
-  const opens = canOpen(node);
+  const opens = previewVersion === undefined ? canOpen(node) : node.kind === "part";
   return (
     <div className="panel">
       <div className="eyebrow">{node.kind === "step" ? stepLabel(node, data) : node.kind === "system" && node.short.startsWith("Outside tool") ? "Outside tool" : KIND[node.kind]}{node.entry ? ` · ${entryName(node.entry, data).name}` : ""}</div>
@@ -52,7 +54,7 @@ function NodePanel({ node, data, mode, onSelect, onOpen, onAsk }: Props & { node
       {text && <p><Prose text={text} /></p>}
       {opens && (
         <button className="primary" onClick={() => onOpen(node.id)}>
-          {node.children === "unopened" ? "Open ▸ (Claude writes this level, about a minute)" : node.kind === "journey" ? "See every step ▸" : node.kind === "part" && node.children === "leaf" ? "Open: show its files ▸" : "Open ▸"}
+          {node.children === "unopened" ? previewVersion === undefined ? "Open ▸ (Claude writes this level, about a minute)" : "Open: show its files ▸" : node.kind === "journey" ? "See every step ▸" : node.kind === "part" && node.children === "leaf" ? "Open: show its files ▸" : "Open ▸"}
         </button>
       )}
       {onAsk && (
@@ -219,21 +221,27 @@ function findNode(node: TreeNodeView, id: string): Extract<TreeNodeView, { kind:
 }
 
 /** The bottom level: what a function calls (its subtree in a journey's call tree) and its source. */
-function FunctionPanel({ id, entry, data, onSelect }: Props & { id: string; entry: string | undefined }) {
+function FunctionPanel({ id, entry, data, onSelect, previewVersion }: Props & { id: string; entry: string | undefined }) {
   const fn = data.refs[id];
   const [tree, setTree] = useState<TreeView | null | "none">(null);
   const [source, setSource] = useState<SourceView | null>(null);
+  const [sourceError, setSourceError] = useState<string | null>(null);
+  const [treeError, setTreeError] = useState<string | null>(null);
   const [showNoise, setShowNoise] = useState(false);
   useEffect(() => {
     let live = true;
     setTree(null);
     setSource(null);
-    api.fnCalls(id, entry).then((t) => live && setTree(t), () => live && setTree("none"));
-    api.source(id).then((s) => live && setSource(s), () => live && setSource(null));
+    setSourceError(null);
+    setTreeError(null);
+    api.fnCalls(id, entry, previewVersion !== undefined).then((t) => live && setTree(t), (e: unknown) => {
+      if (live) { setTree("none"); setTreeError(String(e)); }
+    });
+    api.source(id, previewVersion !== undefined).then((s) => live && setSource(s), (e: unknown) => live && setSourceError(String(e)));
     return () => {
       live = false;
     };
-  }, [id, entry]);
+  }, [id, entry, previewVersion]);
   if (!fn) return <div className="panel muted">Unknown function.</div>;
   const node = tree && tree !== "none" ? findNode(tree.root, id) : undefined;
   const pick = (f: FunctionRef): void => onSelect({ kind: "fn", id: f.id, ...(entry ? { entry } : {}) });
@@ -253,7 +261,7 @@ function FunctionPanel({ id, entry, data, onSelect }: Props & { id: string; entr
       ) : node && node.children.length ? (
         <TreeList nodes={node.children} showNoise={showNoise} onOpen={pick} />
       ) : (
-        <p className="muted">{tree === "none" ? "No traced flow reaches this function." : "No further calls."}</p>
+        <p className="muted">{tree === "none" ? treeError ?? "No traced flow reaches this function." : "No further calls."}</p>
       )}
       <div className="eyebrow">Code</div>
       <pre className="code">
@@ -264,25 +272,27 @@ function FunctionPanel({ id, entry, data, onSelect }: Props & { id: string; entr
                 {line}
               </div>
             ))
-          : "Loading…"}
+          : sourceError ? `Could not load source: ${sourceError}` : "Loading…"}
       </pre>
     </div>
   );
 }
 
 /** A flow outside the main journeys: its one line and its call tree. */
-function EntryPanel({ entry, data, mode, onSelect }: Props & { entry: string }) {
+function EntryPanel({ entry, data, mode, onSelect, previewVersion }: Props & { entry: string }) {
   const [tree, setTree] = useState<TreeView | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [showNoise, setShowNoise] = useState(false);
   const other = data.otherFlows.find((f) => f.entry === entry);
   useEffect(() => {
     let live = true;
     setTree(null);
-    api.entryCalls(entry).then((t) => live && setTree(t), () => live && setTree(null));
+    setError(null);
+    api.entryCalls(entry, previewVersion !== undefined).then((t) => live && setTree(t), (e: unknown) => live && setError(String(e)));
     return () => {
       live = false;
     };
-  }, [entry]);
+  }, [entry, previewVersion]);
   const pick = (f: FunctionRef): void => onSelect({ kind: "fn", id: f.id, entry });
   return (
     <div className="panel">
@@ -304,7 +314,7 @@ function EntryPanel({ entry, data, mode, onSelect }: Props & { entry: string }) 
           )}
         </>
       ) : (
-        <p className="muted">Loading…</p>
+        <p className="muted">{error ? `Could not load calls: ${error}` : "Loading…"}</p>
       )}
     </div>
   );

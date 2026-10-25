@@ -82,6 +82,7 @@ function treeMap(u: Understanding): string[] {
 }
 
 function selected(u: Understanding, id: string): string[] {
+  if (!Object.hasOwn(u.nodes, id)) return [];
   const node = u.nodes[id];
   if (!node) return [];
   const parentOf = new Map(Object.values(u.nodes).flatMap((n) => (Array.isArray(n.children) ? n.children.map((c) => [c, n] as const) : [])));
@@ -102,15 +103,17 @@ function selected(u: Understanding, id: string): string[] {
 
 export function askPrompt(inputs: Omit<AskInputs, "runner">): string {
   const history = (inputs.history ?? []).slice(-MAX_HISTORY);
+  const current = inputs.changes?.after?.understanding ?? inputs.understanding;
+  const selectedTree = inputs.node && Object.hasOwn(current.nodes, inputs.node) ? current : inputs.understanding;
   return [
     "You answer a developer's question about this codebase, as a senior engineer who knows it well.",
     `You are a read-only agent: Read, Grep, Glob and LS inside the repository, at most ${inputs.maxToolCalls} tool calls. Read the code that answers the question rather than guessing; the map below was computed from the code and written by an earlier pass.`,
     `Digests you can Read in ${inputs.digestDir}: ${inputs.digestNames.join(", ")} (files.md lists every source file; flow-*.md hold call trees).`,
     "",
     "=== Map ===",
-    ...treeMap(inputs.understanding),
+    ...treeMap(current),
     "",
-    ...(inputs.node ? [...selected(inputs.understanding, inputs.node), ""] : []),
+    ...(inputs.node ? [...selected(selectedTree, inputs.node), ""] : []),
     ...(history.length ? ["=== Earlier in this chat ===", ...history.flatMap((t) => [`Q: ${t.question}`, `A: ${t.answer}`]), ""] : []),
     ...(inputs.changes ? changeSection(inputs.changes) : []),
     "=== Question ===",
@@ -155,7 +158,7 @@ export function checkAnswer(out: AskOutput, facts: Facts, u: Understanding, comm
   if (n > ANSWER_WORDS.limit) problems.push(`answer has ${n} words (at most ${ANSWER_WORDS.ask})`);
   for (const raw of out.cites) {
     const cite = citeKey(raw);
-    if (u.nodes[cite] || functions.has(cite) || files.has(cite) || commitOf(cite, commits)) continue;
+    if (Object.hasOwn(u.nodes, cite) || functions.has(cite) || files.has(cite) || commitOf(cite, commits)) continue;
     problems.push(`cite "${raw}" is not a box id, function id or source file path${commits?.length ? ", or a listed commit" : ""}`);
   }
   return problems;
@@ -166,9 +169,9 @@ export function splitCites(cites: string[], facts: Facts, u: Understanding, comm
   const files = new Set(facts.files.map((f) => f.path));
   const unique = [...new Set(cites.map(citeKey))];
   return {
-    nodes: unique.filter((c) => u.nodes[c] !== undefined),
-    functions: unique.filter((c) => u.nodes[c] === undefined && functions.has(c)),
-    files: unique.filter((c) => u.nodes[c] === undefined && !functions.has(c) && files.has(c)),
+    nodes: unique.filter((c) => Object.hasOwn(u.nodes, c)),
+    functions: unique.filter((c) => !Object.hasOwn(u.nodes, c) && functions.has(c)),
+    files: unique.filter((c) => !Object.hasOwn(u.nodes, c) && !functions.has(c) && files.has(c)),
     commits: [...new Set(unique.flatMap((c) => commitOf(c, commits) ?? []))],
   };
 }

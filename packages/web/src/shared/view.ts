@@ -15,6 +15,7 @@ const fileOf = (fn: string): string => fn.slice(0, fn.indexOf("#"));
 
 /** The folder that holds all the files (one file: its path); mixed folders: the top ones, most files first. */
 export function folderName(files: string[]): string {
+  if (files.length === 0) return "";
   if (files.length === 1) return files[0] ?? "";
   const dirs = files.map((f) => f.split("/").slice(0, -1));
   const common: string[] = [];
@@ -52,7 +53,7 @@ export function partName(node: NodeView, data: TreeData): string {
 /** Code names in place of prose, for the expert setting. */
 export function codeName(node: NodeView, data: TreeData): string {
   if (node.kind === "part") return partName(node, data);
-  if (node.kind === "system") return node.files.length ? `${node.files.length} files call it` : node.title;
+  if (node.kind === "system") return node.title;
   const names = node.functions.slice(0, 2).map((id) => `${data.refs[id]?.name ?? id}()`);
   return names.join(", ") + (node.functions.length > 2 ? ` +${node.functions.length - 2}` : "");
 }

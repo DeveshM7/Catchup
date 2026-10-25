@@ -50,6 +50,33 @@ describe("flowLayout", () => {
     }
   });
 
+  it("routes around an occupied row instead of searching forever", () => {
+    const input = [step("a", "api"), step("branch", "api", [], "branch"), step("b", "api"), step("error", "api", [], "error"), step("c", "api")];
+    const graph = flowLayout(input);
+    expect(graph.steps).toHaveLength(5);
+    for (const a of graph.steps) for (const b of graph.steps) if (a !== b) expect(overlaps(a, b)).toBe(false);
+    for (const edge of graph.edges) {
+      for (let i = 1; i < edge.points.length; i++) {
+        const a = edge.points[i - 1]!;
+        const b = edge.points[i]!;
+        expect(a.x === b.x || a.y === b.y).toBe(true);
+        for (const box of graph.steps.filter((n) => n.id !== edge.from && n.id !== edge.to)) {
+          const crosses = a.x === b.x
+            ? a.x > box.x && a.x < box.x + box.width && Math.max(a.y, b.y) > box.y && Math.min(a.y, b.y) < box.y + box.height
+            : a.y > box.y && a.y < box.y + box.height && Math.max(a.x, b.x) > box.x && Math.min(a.x, b.x) < box.x + box.width;
+          expect(crosses).toBe(false);
+        }
+      }
+    }
+    expect(flowLayout(input)).toEqual(graph);
+  });
+
+  it("handles an empty journey with finite dimensions", () => {
+    const graph = flowLayout([]);
+    expect(graph.steps).toEqual([]);
+    expect(Number.isFinite(graph.width) && Number.isFinite(graph.height)).toBe(true);
+  });
+
   it("is deterministic", () => {
     expect(flowLayout(steps)).toEqual(layout);
   });

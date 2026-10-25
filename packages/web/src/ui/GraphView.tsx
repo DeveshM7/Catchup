@@ -111,7 +111,12 @@ export function GraphView({ graph, active, selected, onSelect, body = defaultBod
               if (opens) onOpen(node.id);
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && opens) onOpen(node.id);
+              if (e.target !== e.currentTarget) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                onSelect(selected === node.id ? null : node.id);
+              }
             }}
             title={node.description}
           >

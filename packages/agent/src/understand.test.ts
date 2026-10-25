@@ -194,4 +194,23 @@ describe("understand on fixtures/tiny-web (fake Claude)", async () => {
     const run = fakes({ "journey:Sending a message": [bad] });
     await expect(understand(base(run.runnerFor))).rejects.toThrow(/lib\/db\.ts#listChats", which is not a function in this journey/);
   });
+
+  it("waits for in-flight passes and saves their results before reporting a parallel failure", async () => {
+    const run = fakes({ "journey:Sending a message": [{ steps: [] }] });
+    const saved: Understanding[] = [];
+    let partFinished = false;
+    const runnerFor = (pass: string): Runner => {
+      const answer = run.runnerFor(pass);
+      return async (prompt, schema) => {
+        if (pass === "part:Chat screen") {
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          partFinished = true;
+        }
+        return answer(prompt, schema);
+      };
+    };
+    await expect(understand({ ...base(runnerFor), onProgress: (partial) => saved.push(partial) })).rejects.toThrow(/failed validation twice/);
+    expect(partFinished).toBe(true);
+    expect(saved.at(-1)?.nodes["part:components/chat.tsx"]?.children).toEqual(tree.nodes["part:components/chat.tsx"]!.children);
+  });
 });

@@ -21,8 +21,11 @@ import { fileSides, sideRoots } from "./sides.js";
 import { markActionCalls, type Route } from "./links.js";
 import { buildCallTree, callsByCaller, DEFAULT_TREE_LIMITS, type CallTree, type TreeLimits } from "./calltree.js";
 import { scoreTree } from "./scoring.js";
+import { FUNCTION_HASH_VERSION } from "./hash.js";
 
 export * from "./facts.js";
+export { FUNCTION_HASH_VERSION } from "./hash.js";
+export { refreshFunctionHashes } from "./rehash.js";
 export * from "./snapshot.js";
 export { DEFAULT_GROUPING, groupFiles, type GroupingOptions } from "./structure.js";
 export { EXTERNAL_SYSTEMS, externalFor } from "./externals.js";
@@ -89,7 +92,7 @@ export async function analyze(repoPath: string, sha: string, options: AnalyzeOpt
   const ui = uiEntryPoints(calls, (pkg) => externalFor(pkg) !== undefined);
   const entryPoints = detectEntryPoints({ ...entryInputs, extra: [...entryInputs.extra, ...ui], calledFunctions });
 
-  const facts: Facts = { sha, files, functions, imports, calls, entryPoints };
+  const facts: Facts = { sha, hashVersion: FUNCTION_HASH_VERSION, files, functions, imports, calls, entryPoints };
   const snapshot = buildSnapshot(facts, findPackageDirs(paths), options.grouping ?? DEFAULT_GROUPING);
   return { facts, snapshot };
 }
