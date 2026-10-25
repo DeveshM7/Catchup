@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import ts from "typescript";
 import type { Facts, FileFact, FunctionFact } from "./facts.js";
@@ -38,7 +38,8 @@ export type AnalyzeOptions = { grouping?: GroupingOptions };
 
 /** Extract facts and build the structure snapshot for the working tree at `repoRoot`. */
 export async function analyze(repoPath: string, sha: string, options: AnalyzeOptions = {}): Promise<{ facts: Facts; snapshot: Snapshot }> {
-  const repoRoot = resolve(repoPath);
+  // The real path: dependency-cruiser resolves symlinks (macOS `/var` → `/private/var`), and every path must agree.
+  const repoRoot = realpathSync(resolve(repoPath));
   const paths = listRepoPaths(repoRoot);
   const sourcePaths = paths.filter(isSourcePath);
   const packages = readPackages(repoRoot, paths, new Set(sourcePaths));

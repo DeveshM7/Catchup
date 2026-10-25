@@ -78,6 +78,12 @@ describe("checkSteps", () => {
     expect(checkSteps({ steps: [step("Start", ["h", "a"]), step("Checks", ["b"], "check"), step("Tool", ["t2", "c"])] }, rules)).toEqual([]);
   });
 
+  it("accepts a step citing the code that encloses the previous step (the handler both run in)", () => {
+    const enclosing = { ...rules, callers: new Map([["c", new Set(["h", "a"])]]) };
+    expect(checkSteps({ steps: [step("Start", ["h"]), step("Save", ["c", "t1", "t2"]), step("Stream", ["a"])] }, enclosing)).toEqual([]);
+    expect(checkSteps({ steps: [step("Start", ["h"]), step("Save", ["c", "t1", "t2"]), step("Stream", ["a"])] }, rules)).toContain(`step 3 ("Stream") runs entirely before "Save"; order the main steps as the code runs`);
+  });
+
   it("accepts a step that cites early setup along with later work", () => {
     expect(checkSteps({ steps: [step("Start", ["h"]), step("Run", ["c", "t1"]), step("Report", ["b", "t2"])] }, rules)).toEqual([]);
   });

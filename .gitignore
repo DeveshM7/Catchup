@@ -12,3 +12,4 @@ fixtures/*
 !fixtures/tiny-ai/
 !fixtures/tiny-cli/
 !fixtures/tiny-web/
+!fixtures/tiny-changes/

@@ -1,5 +1,19 @@
 import type { CallTree, FunctionTreeNode, TreeNode } from "@catchup/analyzer";
 
+/** For each function, the functions that call it on some path from the root (its enclosing code). */
+export function callersOf(tree: CallTree): Map<string, Set<string>> {
+  const callers = new Map<string, Set<string>>();
+  const walk = (node: TreeNode, path: string[]): void => {
+    if (node.kind !== "function") return;
+    const set = callers.get(node.fn) ?? new Set<string>();
+    for (const fn of path) set.add(fn);
+    callers.set(node.fn, set);
+    node.children.forEach((c) => walk(c, [...path, node.fn]));
+  };
+  walk(tree.root, []);
+  return callers;
+}
+
 /** Each function's first position in the call tree, in the order calls run (preorder). */
 export function preorder(tree: CallTree): Map<string, number> {
   const order = new Map<string, number>();

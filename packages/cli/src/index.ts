@@ -1,9 +1,8 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { analyze, buildCallTrees, computeSignals, type Signals, type Snapshot } from "@catchup/analyzer";
-import { fileChurn } from "@catchup/history";
+import { buildCallTrees, type Signals, type Snapshot } from "@catchup/analyzer";
+import { renamesBetween } from "@catchup/history";
 import {
   agentRunner,
   anthropicRunner,
@@ -13,7 +12,9 @@ import {
   DEFAULT_MAX_TOOL_CALLS,
   DEFAULT_MODEL,
   droidRunner,
+  evolve,
   explainSnapshot,
+  formatChanges,
   openNode,
   providerFrom,
   selectTopFlows,
@@ -28,21 +29,9 @@ import {
   type UnderstandInputs,
   type UnderstandStats,
 } from "@catchup/agent";
-import {
-  loadExplained,
-  loadFacts,
-  loadSignals,
-  loadSnapshot,
-  loadUnderstanding,
-  saveAnalysis,
-  saveDigest,
-  saveExplained,
-  saveRun,
-  saveSignals,
-  saveUnderstanding,
-  storePaths,
-} from "@catchup/store";
+import { loadExplained, loadFacts, loadSnapshot, loadUnderstanding, saveDigest, saveExplained, saveRun, saveUnderstanding, storePaths } from "@catchup/store";
 import { startDashboard } from "@catchup/web";
+import { analyzeAt, ancestorWithTree, changeSet, headSha, loadWorkspace, readReadme, resolveCommit, withCode, workspaceAt, type Workspace } from "./commits.js";
 import { formatTree } from "./tree.js";
 import { formatUnderstanding } from "./understanding.js";
 
@@ -51,25 +40,19 @@ export const packageName = "cli";
 export function usage(): string {
   return [
     "usage: catchup <command> [path]",
-    "  init <path>                    analyze HEAD and save .catchup/ files",
+    "  init <path> [--at <ref>]       analyze HEAD (or a commit, in a worktree) and save .catchup/ files",
     "  flow <path>                    list entry points (run init first)",
     '  flow <path> "<label>" [--all]  print one call tree, e.g. "POST /api/auth/login"',
     '  explain <path> ["<label>" …] [--top N]   Claude explains flows (default: top 15) and components',
     "  understand <path> [--max-calls N]        read-only Claude agents build the understanding tree",
+    "  understand <path> --at <ref> [--from <ref>]   the tree at a commit, evolved from an earlier tree (edit, don't regenerate)",
+    "  diff <path> <from> <to>        what changed between two commits with trees (files, entry points, systems, boxes, journeys)",
     '  understand <path> --open "<node id>"     write the children of an unopened node',
     "  open <path> [--port N]         show the understanding tree in your browser (opening a box or asking calls Claude)",
     '  ask <path> "<question>" [--node "<node id>"]   ask a read-only agent about the code; answers cite real code',
     "",
     "Claude is reached through Droid (FACTORY_API_KEY) by default; CATCHUP_PROVIDER=anthropic uses the Anthropic API (ANTHROPIC_API_KEY).",
   ].join("\n");
-}
-
-function headSha(repoRoot: string): string {
-  try {
-    return execFileSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-  } catch {
-    throw new Error(`${repoRoot} is not a git repository with at least one commit`);
-  }
 }
 
 /** Plain-text table of components, largest first. */
@@ -110,14 +93,6 @@ export function formatSummary(snapshot: Snapshot): string {
   ].join("\n");
 }
 
-function readReadme(repoRoot: string): string | undefined {
-  for (const name of ["README.md", "readme.md", "Readme.md", "README"]) {
-    const path = join(repoRoot, name);
-    if (existsSync(path)) return readFileSync(path, "utf8");
-  }
-  return undefined;
-}
-
 /** Files most flows run through, then most changed: where a reader should look first. */
 export function formatHotFiles(signals: Signals, limit = 8): string {
   const rows = Object.entries(signals.files)
@@ -128,21 +103,22 @@ export function formatHotFiles(signals: Signals, limit = 8): string {
   return [`Busiest files (${signals.families.length} flow families):`, ...rows].join("\n");
 }
 
-async function init(target: string): Promise<void> {
+function repoOf(target: string): string {
   const repoRoot = resolve(target);
   if (!existsSync(repoRoot)) throw new Error(`no such directory: ${repoRoot}`);
-  const sha = headSha(repoRoot);
+  return repoRoot;
+}
+
+async function init(target: string, at: string | undefined): Promise<void> {
+  const repoRoot = repoOf(target);
+  const sha = at === undefined ? headSha(repoRoot) : resolveCommit(repoRoot, at);
   const started = Date.now();
-  const { facts, snapshot } = await analyze(repoRoot, sha);
-  const paths = saveAnalysis(repoRoot, facts, snapshot);
-  const signals = computeSignals({ facts, trees: buildCallTrees(facts, snapshot), churn: fileChurn(repoRoot, sha), readme: readReadme(repoRoot) });
-  const signalsPath = saveSignals(repoRoot, signals);
+  const { facts, snapshot, signals } = await withCode(repoRoot, sha, (dir) => analyzeAt(repoRoot, dir, sha));
+  const paths = storePaths(repoRoot, sha);
   console.log(formatSummary(snapshot));
   console.log(`\n${formatHotFiles(signals)}`);
   console.log(`\nAnalyzed ${sha.slice(0, 9)} in ${((Date.now() - started) / 1000).toFixed(1)} s`);
-  console.log(`Saved ${relative(process.cwd(), paths.facts)}`);
-  console.log(`Saved ${relative(process.cwd(), paths.snapshot)}`);
-  console.log(`Saved ${relative(process.cwd(), signalsPath)}`);
+  for (const path of [paths.facts, paths.snapshot, paths.signals]) console.log(`Saved ${relative(process.cwd(), path)}`);
   console.log(`${facts.entryPoints.length} entry points, ${facts.calls.length} calls; see them with: catchup flow ${target}`);
 }
 
@@ -254,22 +230,15 @@ function readPackageJson(repoRoot: string): string | undefined {
   return existsSync(path) ? readFileSync(path, "utf8") : undefined;
 }
 
-type UnderstandOptions = { open?: string; maxCalls: number };
+type UnderstandOptions = { open?: string; maxCalls: number; at?: string; from?: string };
 
-type Workspace = {
-  repoRoot: string;
-  sha: string;
-  facts: ReturnType<typeof loadFacts>;
-  snapshot: Snapshot;
-  trees: ReturnType<typeof buildCallTrees>;
-  signals: Signals;
-};
-
+/** The stored analysis of HEAD, read in place. */
 function workspace(target: string): Workspace {
-  const { repoRoot, sha, facts, snapshot } = loadAnalysis(target);
-  const trees = buildCallTrees(facts, snapshot);
-  const signals = loadSignals(repoRoot, sha) ?? computeSignals({ facts, trees, churn: fileChurn(repoRoot, sha), readme: readReadme(repoRoot) });
-  return { repoRoot, sha, facts, snapshot, trees, signals };
+  const repoRoot = repoOf(target);
+  const sha = headSha(repoRoot);
+  const ws = loadWorkspace(repoRoot, repoRoot, sha);
+  if (!ws) throw new Error(`no analysis for ${sha.slice(0, 9)}; run: catchup init ${target}`);
+  return ws;
 }
 
 type Session = {
@@ -281,15 +250,16 @@ type Session = {
 
 /** Everything one Understand or Open run needs, and its run log (D38). */
 function understandSession(ws: Workspace, provider: Provider, maxCalls: number, startedAt: Date, quiet = false, onTool?: (call: ToolCallLog) => void): Session {
-  const { repoRoot, sha, facts, snapshot, trees, signals } = ws;
+  const { repoRoot, dir, sha, facts, snapshot, trees, signals } = ws;
+  // Code is read where it is checked out (a worktree for older commits); results are stored in the repo.
   const readFile = (path: string): string | undefined => {
     try {
-      return readFileSync(join(repoRoot, path), "utf8");
+      return readFileSync(join(dir, path), "utf8");
     } catch {
       return undefined;
     }
   };
-  const digest = buildDigest({ facts, snapshot, signals, trees, readme: readReadme(repoRoot), packageJson: readPackageJson(repoRoot), readFile });
+  const digest = buildDigest({ facts, snapshot, signals, trees, readme: readReadme(dir), packageJson: readPackageJson(dir), readFile });
   const digestDir = saveDigest(repoRoot, sha, digest.files);
   const model = process.env.CATCHUP_MODEL ?? DEFAULT_MODEL;
   const passes: PassLog[] = [];
@@ -313,7 +283,7 @@ function understandSession(ws: Workspace, provider: Provider, maxCalls: number, 
       runnerFor: (pass) =>
         agentRunner({
           pass,
-          cwd: repoRoot,
+          cwd: dir,
           roots: [digestDir],
           model,
           maxToolCalls: maxCalls,
@@ -345,35 +315,68 @@ function understandSession(ws: Workspace, provider: Provider, maxCalls: number, 
   };
 }
 
-/** Builds (or extends) the understanding tree with read-only Claude agents (Build 2). */
-async function understandCommand(target: string, options: UnderstandOptions): Promise<void> {
+/**
+ * The tree at one commit (Builds 2 and 6): carried forward when it exists, evolved from an earlier commit's tree when one
+ * exists (edit, don't regenerate, D4), else written from scratch. Returns the tree and the change set when it evolved.
+ */
+export async function treeAt(repoRoot: string, sha: string, options: { maxCalls: number; from?: string; open?: string; quiet?: boolean }): Promise<{ understanding: Understanding; evolvedFrom?: string }> {
   const provider = loadEnv();
-  const ws = workspace(target);
-  const startedAt = new Date();
-  const session = understandSession(ws, provider, options.maxCalls, startedAt);
-  const previous = loadUnderstanding<Understanding>(ws.repoRoot, ws.sha);
-  const inputs = session.inputs(previous);
-  let stats: UnderstandStats | undefined;
-  try {
-    let result: { understanding: Understanding; stats: UnderstandStats };
-    if (options.open !== undefined) {
-      if (!previous) throw new Error(`no understanding for ${ws.sha.slice(0, 9)} yet; run: catchup understand ${target}`);
-      result = await openNode(inputs, previous, options.open);
-    } else {
-      result = await understand(inputs);
+  return withCode(repoRoot, sha, async (dir) => {
+    const ws = await workspaceAt(repoRoot, dir, sha);
+    const startedAt = new Date();
+    const session = understandSession(ws, provider, options.maxCalls, startedAt, options.quiet);
+    const previous = loadUnderstanding<Understanding>(repoRoot, sha);
+    const inputs = session.inputs(previous);
+    const from = previous || options.open !== undefined ? undefined : (options.from ?? ancestorWithTree(repoRoot, sha));
+    let stats: UnderstandStats | undefined;
+    let command = options.open !== undefined ? `understand --open ${options.open}` : "understand";
+    try {
+      let result: { understanding: Understanding; stats: UnderstandStats };
+      if (options.open !== undefined) {
+        if (!previous) throw new Error(`no understanding for ${sha.slice(0, 9)} yet; run: catchup understand <path>`);
+        result = await openNode(inputs, previous, options.open);
+      } else if (from !== undefined) {
+        const base = loadUnderstanding<Understanding>(repoRoot, from);
+        if (!base) throw new Error(`no understanding for ${from.slice(0, 9)} to evolve from`);
+        command = `understand --from ${from.slice(0, 9)}`;
+        result = await evolve({ ...inputs, from: { understanding: base, facts: loadFacts(repoRoot, from) }, renames: renamesBetween(repoRoot, from, sha) });
+      } else {
+        result = await understand(inputs);
+      }
+      stats = result.stats;
+      saveUnderstanding(repoRoot, result.understanding);
+      if (!options.quiet) {
+        console.log(formatUnderstanding(result.understanding));
+        console.log(
+          `\n${stats.calls} Claude calls (${stats.passes} passes run, ${stats.carried} unchanged), ` +
+            `${session.toolCalls()} tool calls, ${((Date.now() - startedAt.getTime()) / 1000).toFixed(0)} s`,
+        );
+      }
+      return { understanding: result.understanding, ...(from !== undefined ? { evolvedFrom: from } : {}) };
+    } finally {
+      const log = session.finish(command, stats);
+      if (!options.quiet) console.error(`Run log: ${relative(process.cwd(), log)}`);
     }
-    stats = result.stats;
-    const path = saveUnderstanding(ws.repoRoot, result.understanding);
-    console.log(formatUnderstanding(result.understanding));
-    console.log(
-      `\n${stats.calls} Claude calls (${stats.passes} passes run, ${stats.carried} unchanged), ` +
-        `${session.toolCalls()} tool calls, ${((Date.now() - startedAt.getTime()) / 1000).toFixed(0)} s`,
-    );
-    console.log(`Saved ${relative(process.cwd(), path)}`);
-  } finally {
-    const log = session.finish(options.open !== undefined ? `understand --open ${options.open}` : "understand", stats);
-    console.error(`Run log: ${relative(process.cwd(), log)}`);
+  });
+}
+
+/** Builds (or extends) the understanding tree with read-only Claude agents (Builds 2, 6). */
+async function understandCommand(target: string, options: UnderstandOptions): Promise<void> {
+  const repoRoot = repoOf(target);
+  const sha = options.at === undefined ? headSha(repoRoot) : resolveCommit(repoRoot, options.at);
+  const from = options.from === undefined ? undefined : resolveCommit(repoRoot, options.from);
+  const result = await treeAt(repoRoot, sha, { maxCalls: options.maxCalls, ...(from ? { from } : {}), ...(options.open !== undefined ? { open: options.open } : {}) });
+  console.log(`Saved ${relative(process.cwd(), storePaths(repoRoot, sha).understanding)}`);
+  if (result.evolvedFrom !== undefined) {
+    console.log(`\nChanges since ${result.evolvedFrom.slice(0, 9)}:\n${formatChanges(changeSet(repoRoot, result.evolvedFrom, sha))}`);
   }
+}
+
+/** Prints (and saves) what changed between two commits that have trees (Build 6). */
+function diff(target: string, fromRef: string | undefined, toRef: string | undefined): void {
+  if (fromRef === undefined || toRef === undefined) throw new Error("usage: catchup diff <path> <from> <to>");
+  const repoRoot = repoOf(target);
+  console.log(formatChanges(changeSet(repoRoot, resolveCommit(repoRoot, fromRef), resolveCommit(repoRoot, toRef))));
 }
 
 /** The Open pass behind the dashboard's "open" clicks: one run log per open, the tree saved after each. */
@@ -456,7 +459,9 @@ export async function main(argvIn: string[]): Promise<number> {
   const { value: topValue, rest: afterTop } = option(afterPort, "--top");
   const { value: openValue, rest: afterOpen } = option(afterTop, "--open");
   const { value: maxCallsValue, rest: afterMax } = option(afterOpen, "--max-calls");
-  const { value: nodeValue, rest: argv } = option(afterMax, "--node");
+  const { value: nodeValue, rest: afterNode } = option(afterMax, "--node");
+  const { value: atValue, rest: afterAt } = option(afterNode, "--at");
+  const { value: fromValue, rest: argv } = option(afterAt, "--from");
   const showNoise = argv.includes("--all");
   const [command, target = ".", label, ...more] = argv.filter((arg) => arg !== "--all");
   if (command === "explain") {
@@ -468,7 +473,7 @@ export async function main(argvIn: string[]): Promise<number> {
   if (command === "understand") {
     const maxCalls = maxCallsValue === undefined ? DEFAULT_MAX_TOOL_CALLS : Number(maxCallsValue);
     if (!Number.isInteger(maxCalls) || maxCalls < 0) throw new Error("--max-calls needs a number ≥ 0");
-    await understandCommand(target, { ...(openValue !== undefined ? { open: openValue } : {}), maxCalls });
+    await understandCommand(target, { ...(openValue !== undefined ? { open: openValue } : {}), ...(atValue ? { at: atValue } : {}), ...(fromValue ? { from: fromValue } : {}), maxCalls });
     return 0;
   }
   if (command === "open") {
@@ -487,7 +492,11 @@ export async function main(argvIn: string[]): Promise<number> {
     return 0;
   }
   if (command === "init") {
-    await init(target);
+    await init(target, atValue);
+    return 0;
+  }
+  if (command === "diff") {
+    diff(target, label, more[0]);
     return 0;
   }
   if (command === "flow") {

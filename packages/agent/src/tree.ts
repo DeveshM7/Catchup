@@ -70,6 +70,8 @@ export type Understanding = {
   extras?: Extras;
   /** Basis of the survey pass. */
   basis: string;
+  /** Set when this tree was evolved from an earlier commit's tree (Build 6): that commit's sha. */
+  from?: string;
 };
 
 // Asked-for lengths; the validator allows slack so a word over doesn't fail the run (D34).

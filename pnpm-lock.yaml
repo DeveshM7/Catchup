@@ -196,6 +196,9 @@ importers:
       '@catchup/analyzer':
         specifier: workspace:*
         version: link:../analyzer
+      '@catchup/history':
+        specifier: workspace:*
+        version: link:../history
       '@factory/droid-sdk':
         specifier: ^0.10.0
         version: 0.10.0(supports-color@7.2.0)

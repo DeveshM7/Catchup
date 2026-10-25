@@ -6,6 +6,23 @@ export const CATCHUP_DIR = ".catchup";
 
 export type StoredPaths = { facts: string; snapshot: string; signals: string; explained: string; digest: string; understanding: string };
 
+/** The change set between two commits (Build 6). */
+export function changesPath(repoRoot: string, from: string, to: string): string {
+  return join(repoRoot, CATCHUP_DIR, "changes", `${from}..${to}.json`);
+}
+
+export function saveChanges<T extends { from: string; to: string }>(repoRoot: string, changes: T): string {
+  const path = changesPath(repoRoot, changes.from, changes.to);
+  ensureIgnored(repoRoot);
+  writeJson(path, changes);
+  return path;
+}
+
+export function loadChanges<T>(repoRoot: string, from: string, to: string): T | undefined {
+  const path = changesPath(repoRoot, from, to);
+  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as T) : undefined;
+}
+
 export function storePaths(repoRoot: string, sha: string): StoredPaths {
   const base = join(repoRoot, CATCHUP_DIR);
   return {

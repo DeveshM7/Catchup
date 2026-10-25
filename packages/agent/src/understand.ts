@@ -2,7 +2,7 @@ import type { CallTree, Facts, Signals, Snapshot } from "@catchup/analyzer";
 import type * as z from "zod/v4";
 import { treeFunctions, type BriefInputs } from "./brief.js";
 import { askStructured, type Runner } from "./droid.js";
-import { keyFunctionGroups, nodesFor, preorder, subtreeFunctions } from "./journey.js";
+import { callersOf, keyFunctionGroups, nodesFor, preorder, subtreeFunctions } from "./journey.js";
 import {
   ChildrenOutput,
   ExtrasOutput,
@@ -27,7 +27,7 @@ import { childrenPrompt, extrasPrompt, OTHER_FLOWS, stepsPrompt, subStepsPrompt,
 export const MIN_TO_SPLIT = 3;
 /** Claude-written levels. */
 export const MAX_DEPTH = 5;
-const DEFAULT_CONCURRENCY = 4;
+export const DEFAULT_CONCURRENCY = 4;
 
 export type UnderstandInputs = {
   facts: Facts;
@@ -53,7 +53,7 @@ export type UnderstandInputs = {
 
 export type UnderstandStats = { calls: number; passes: number; carried: number };
 
-type Work = {
+export type Work = {
   inputs: UnderstandInputs;
   ctx: PromptContext;
   nodes: Record<string, UnderstandingNode>;
@@ -64,7 +64,7 @@ type Work = {
   allFunctions: Set<string>;
 };
 
-function startWork(inputs: UnderstandInputs, nodes: Record<string, UnderstandingNode> = {}): Work {
+export function startWork(inputs: UnderstandInputs, nodes: Record<string, UnderstandingNode> = {}): Work {
   const brief: BriefInputs = { functions: new Map(inputs.facts.functions.map((fn) => [fn.id, fn])), readFile: inputs.readFile };
   return {
     inputs,
@@ -78,7 +78,7 @@ function startWork(inputs: UnderstandInputs, nodes: Record<string, Understanding
   };
 }
 
-function ask<T>(work: Work, pass: string, prompt: string, schema: z.ZodType<T>, check: (value: T) => string[]): Promise<T> {
+export function ask<T>(work: Work, pass: string, prompt: string, schema: z.ZodType<T>, check: (value: T) => string[]): Promise<T> {
   work.stats.passes += 1;
   return askStructured({
     job: pass,
@@ -94,7 +94,7 @@ function ask<T>(work: Work, pass: string, prompt: string, schema: z.ZodType<T>, 
   });
 }
 
-async function pool(tasks: (() => Promise<void>)[], limit: number): Promise<void> {
+export async function pool(tasks: (() => Promise<void>)[], limit: number): Promise<void> {
   let next = 0;
   const workers = Array.from({ length: Math.min(limit, tasks.length) }, async () => {
     while (next < tasks.length) await tasks[next++]!();
@@ -102,7 +102,7 @@ async function pool(tasks: (() => Promise<void>)[], limit: number): Promise<void
   await Promise.all(workers);
 }
 
-const sorted = (values: Iterable<string>): string[] => [...new Set(values)].sort();
+export const sorted = (values: Iterable<string>): string[] => [...new Set(values)].sort();
 
 function centralFile(work: Work): (files: string[]) => string {
   const signals = work.inputs.signals.files;
@@ -114,21 +114,21 @@ function centralFile(work: Work): (files: string[]) => string {
     })[0]!;
 }
 
-function topPartOf(work: Work, partIds: string[]): (file: string) => string | undefined {
+export function topPartOf(work: Work, partIds: string[]): (file: string) => string | undefined {
   const index = new Map<string, string>();
   for (const id of partIds) for (const file of work.nodes[id]?.anchor.files ?? []) index.set(file, id);
   return (file) => index.get(file);
 }
 
-function systemsOfFunctions(work: Work, functions: string[]): string[] {
+export function systemsOfFunctions(work: Work, functions: string[]): string[] {
   return sorted(functions.flatMap((fn) => work.inputs.signals.functions[fn]?.systems ?? []));
 }
 
 /** A family id as Claude wrote it, without heading decoration (`Family 2: \`id\``). */
-const familyKey = (raw: string): string => raw.trim().replace(/^family\s+\d+\s*:\s*/i, "").replace(/^`+|`+$/g, "").trim();
+export const familyKey = (raw: string): string => raw.trim().replace(/^family\s+\d+\s*:\s*/i, "").replace(/^`+|`+$/g, "").trim();
 
 /** Families (best first) that hold none of the journeys: the ones that get a line. */
-function otherFamilies(work: Work, entries: string[]): Signals["families"] {
+export function otherFamilies(work: Work, entries: string[]): Signals["families"] {
   return work.inputs.signals.families.filter((f) => !f.members.some((m) => entries.includes(m))).slice(0, OTHER_FLOWS);
 }
 
@@ -178,7 +178,7 @@ function checkSurvey(work: Work, out: SurveyOutput): string[] {
   return problems;
 }
 
-function journeyNode(work: Work, entry: string, text: { title: string; short: string; long: string }, partIds: string[], basis: string): UnderstandingNode {
+export function journeyNode(work: Work, entry: string, text: { title: string; short: string; long: string }, partIds: string[], basis: string): UnderstandingNode {
   const tree = work.trees.get(entry)!;
   const functions = sorted(treeFunctions(tree));
   const files = sorted(functions.map(fileOf));
@@ -197,7 +197,7 @@ function journeyNode(work: Work, entry: string, text: { title: string; short: st
   };
 }
 
-type SurveyResult = { summary: string; parts: string[]; journeys: string[]; otherFlows: OtherFlow[] };
+export type SurveyResult = { summary: string; parts: string[]; journeys: string[]; otherFlows: OtherFlow[] };
 
 function buildSurvey(work: Work, out: SurveyOutput, basis: string): SurveyResult {
   const { files } = assignFiles(out.parts, work.allFiles);
@@ -274,12 +274,12 @@ function buildChildren(work: Work, parent: UnderstandingNode, out: ChildrenOutpu
 
 // ---------- Steps ----------
 
-function journeyRules(tree: CallTree): StepRules {
-  return { allowed: treeFunctions(tree), order: preorder(tree), first: tree.root.fn, mustCover: keyFunctionGroups(tree), min: 3, max: 7 };
+export function journeyRules(tree: CallTree): StepRules {
+  return { allowed: treeFunctions(tree), order: preorder(tree), callers: callersOf(tree), first: tree.root.fn, mustCover: keyFunctionGroups(tree), min: 3, max: 7 };
 }
 
 function subStepRules(tree: CallTree, step: UnderstandingNode): StepRules {
-  return { allowed: subtreeFunctions(tree, step.anchor.functions), order: preorder(tree), mustCover: step.anchor.functions.map((fn) => [fn]), min: 2, max: 7 };
+  return { allowed: subtreeFunctions(tree, step.anchor.functions), order: preorder(tree), callers: callersOf(tree), mustCover: step.anchor.functions.map((fn) => [fn]), min: 2, max: 7 };
 }
 
 function buildSteps(work: Work, parent: UnderstandingNode, tree: CallTree, out: StepsOutput, basis: string): void {
@@ -309,7 +309,7 @@ function buildSteps(work: Work, parent: UnderstandingNode, tree: CallTree, out: 
   });
 }
 
-function topPartIds(work: Work): string[] {
+export function topPartIds(work: Work): string[] {
   return Object.values(work.nodes)
     .filter((n) => n.kind === "part" && n.depth === 1)
     .map((n) => n.id);
@@ -326,7 +326,7 @@ function journeyOf(work: Work, node: UnderstandingNode): { journey: Understandin
 // ---------- Carry forward ----------
 
 /** Copies a node's descendants from the previous tree. */
-function copyDescendants(work: Work, previous: Understanding, id: string): void {
+export function copyDescendants(work: Work, previous: Understanding, id: string): void {
   const node = previous.nodes[id];
   if (!node || !Array.isArray(node.children)) return;
   for (const child of node.children) {
@@ -398,7 +398,7 @@ function buildExtras(work: Work, out: ExtrasOutput, basis: string): Extras {
 
 // ---------- Passes ----------
 
-function systemNodes(work: Work): string[] {
+export function systemNodes(work: Work): string[] {
   return work.inputs.snapshot.externals.map((ext) => {
     const id = systemId(ext.name);
     const files = sorted(Object.entries(work.inputs.signals.files).flatMap(([path, s]) => (s.systems.includes(ext.name) ? [path] : [])));
@@ -418,7 +418,7 @@ function systemNodes(work: Work): string[] {
   });
 }
 
-function snapshotOf(work: Work, survey: SurveyResult, systems: string[], basis: string, extras?: Extras): Understanding {
+export function snapshotOf(work: Work, survey: SurveyResult, systems: string[], basis: string, extras?: Extras): Understanding {
   return {
     sha: work.inputs.facts.sha,
     model: work.inputs.model,
@@ -438,8 +438,10 @@ function snapshotOf(work: Work, survey: SurveyResult, systems: string[], basis: 
  * A pass whose prompt is unchanged since the stored tree is copied without a Claude call (D4, D38).
  */
 export async function understand(inputs: UnderstandInputs): Promise<{ understanding: Understanding; stats: UnderstandStats }> {
-  const work = startWork(inputs);
   const previous = inputs.previous;
+  // A tree evolved from an earlier commit (Build 6) is already this commit's tree: nothing to write.
+  if (previous?.from !== undefined && previous.sha === inputs.facts.sha) return { understanding: previous, stats: { calls: 0, passes: 0, carried: 1 } };
+  const work = startWork(inputs);
   const systems = systemNodes(work);
 
   const surveyText = surveyPrompt(work.ctx);

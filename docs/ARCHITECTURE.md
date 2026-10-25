@@ -209,14 +209,14 @@ Checked before anything is stored; one retry with the problems listed; then fail
 
 ## Changes (Part 3, Builds 6–9)
 
-**Edit, don't regenerate (D4).** For a new commit: rebuild facts and signals; match old → new functions by ID (renames via `git diff -M`) and body hash; match tree nodes by anchor overlap.
+**Edit, don't regenerate (D4, D57).** A commit other than HEAD is analyzed in a `git worktree` under `<repo>/.catchup/worktrees/` (so packages resolve as for HEAD); the agent reads code there too. `catchup understand --at <ref>` with no tree at that commit evolves the newest ancestor's tree (`agent/src/evolve.ts`):
 
-1. Nodes whose anchor and inputs are unchanged: copied exactly (ID, text). No Claude call.
-2. Changed nodes: Claude gets the old node + what changed and edits minimally.
-3. New code: Claude attaches it to an existing node or proposes a new one (validated).
-4. Removed code: nodes shrink; disappear when empty.
+1. Code maps A's anchors to B: files through renames (`git diff -M`), functions through their file, entry points through their handler. Deleted files and functions drop out.
+2. Parts keep their IDs; new files go to the part (and sub-part) whose files share the most leading folders with them (ties: more files at that depth); empty parts disappear. A part whose file set changed is relabeled.
+3. A journey whose remapped steps still pass the step rules and whose cited functions have unchanged bodies keeps every step (ID, text, opened sub-steps). Otherwise Claude re-tells it with the previous steps, what changed, and the rule "keep unchanged steps": a step with the same functions keeps its ID (and its text if untouched); a re-cut step that overlaps an earlier one by ≥ half (or has its title) keeps that ID and counts as changed.
+4. One "relabel" call updates the text of parts whose files changed, journeys whose systems changed, and writes lines for new other flows. Summary and extras are carried (cites remapped, dead ones dropped). The tree records `from: <sha>`.
 
-- **Change set:** added / changed / removed nodes, plus behavior facts (systems added/removed per journey, steps added/removed, checks removed, new entry points). Computed by code.
+- **Change set (`agent/src/changes.ts`, code only, `changes/<from>..<to>.json`, `catchup diff`):** files added / removed / renamed / changed (by function bodies), entry points and outside systems added / removed, boxes added / removed / changed (text, code, children, systems; anchors compared through the renames), and per journey: systems added / removed, steps added / removed, checks removed (a check step gone, no longer a check, or citing code that no longer runs), functions no longer / newly reached.
 - **Preview (Build 7):** chokidar watches the working tree; ~3 s after the last save, rerun 1–4 on the working tree, diff against HEAD's tree, explain only what changed; never stored. Changed nodes sort first.
 - **Ask about changes (Build 8):** the brief includes the change set and the commits.
 - **Timelapse (Build 9):** ~15 checkpoints between A and B (time-spaced + tags), each analyzed in a `git worktree`, oldest → newest; one layout over the union of all trees (D10); captions cite commits.
