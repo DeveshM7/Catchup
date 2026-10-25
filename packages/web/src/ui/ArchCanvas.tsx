@@ -16,6 +16,10 @@ type Props = {
   selected: string | null;
   onSelect: (box: string | null) => void;
   onOpen: (id: string) => void;
+  /** Where the canvas comes from (default: the stored tree); the preview draws the working tree's. */
+  load?: (id: string) => Promise<MapGraph>;
+  /** A change mark per box (preview): added, changed, or touched (holds changed files). */
+  statusOf?: (box: string) => string | undefined;
 };
 
 /** Files a box stands for, so a selection elsewhere can light it. */
@@ -58,21 +62,21 @@ export const boxBody =
   };
 
 /** One architecture canvas: a node's children (or a leaf part's files) and the outside systems they call. */
-export function ArchCanvas({ id, data, mode, scope, selected, onSelect, onOpen }: Props) {
+export function ArchCanvas({ id, data, mode, scope, selected, onSelect, onOpen, load = api.canvas, statusOf }: Props) {
   const [graph, setGraph] = useState<MapGraph | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     setGraph(null);
     setError(null);
-    api.canvas(id).then(
+    load(id).then(
       (g) => live && setGraph(g),
       (e: unknown) => live && setError(String(e)),
     );
     return () => {
       live = false;
     };
-  }, [id, data]);
+  }, [id, data, load]);
   if (error) return <div className="center-note">Could not draw this level: {error}</div>;
   if (!graph) return <div className="center-note">Drawing…</div>;
   const onCanvas = selected !== null && graph.nodes.some((n) => n.id === selected);
@@ -89,6 +93,7 @@ export function ArchCanvas({ id, data, mode, scope, selected, onSelect, onOpen }
           body={boxBody(data, mode)}
           openable={(box) => data.nodes[box]?.kind === "part"}
           onOpen={onOpen}
+          {...(statusOf ? { statusOf } : {})}
         />
       </Canvas>
       <Legend

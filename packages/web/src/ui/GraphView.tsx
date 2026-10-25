@@ -14,6 +14,8 @@ type Props = {
   /** Boxes that open into their own canvas get an open button (and open on double-click). */
   openable?: (id: string) => boolean;
   onOpen?: (id: string) => void;
+  /** Extra mark per box (`st-<status>` class), e.g. what changed in the preview. */
+  statusOf?: (id: string) => string | undefined;
 };
 
 const IMPORT = "#a3adbd";
@@ -51,7 +53,7 @@ function defaultBody(node: MapNode): ReactNode {
 }
 
 /** A graph canvas: our elkjs layout drawn as HTML boxes over SVG edges (D28). */
-export function GraphView({ graph, active, selected, onSelect, body = defaultBody, openable, onOpen }: Props) {
+export function GraphView({ graph, active, selected, onSelect, body = defaultBody, openable, onOpen, statusOf }: Props) {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const lit = active.size > 0;
   const edges = graph.edges
@@ -91,13 +93,14 @@ export function GraphView({ graph, active, selected, onSelect, body = defaultBod
       {graph.nodes.map((node) => {
         const dim = lit && !active.has(node.id);
         const opens = openable?.(node.id) === true && onOpen !== undefined;
+        const status = statusOf?.(node.id);
         return (
           <div
             key={node.id}
             role="button"
             tabIndex={0}
             data-id={node.id}
-            className={`node ${node.kind} ${dim ? "dim" : ""} ${lit && !dim ? "on" : ""} ${selected === node.id ? "selected" : ""}`}
+            className={`node ${node.kind} ${dim ? "dim" : ""} ${lit && !dim ? "on" : ""} ${selected === node.id ? "selected" : ""} ${status ? `st-${status}` : ""}`}
             style={{ left: node.x, top: node.y, width: node.width, height: node.height, ...cssVars(node.color) }}
             onClick={(e) => {
               e.stopPropagation();
@@ -112,6 +115,7 @@ export function GraphView({ graph, active, selected, onSelect, body = defaultBod
             }}
             title={node.description}
           >
+            {status && <span className={`st-badge ${status}`}>{status}</span>}
             {body(node)}
             {opens && (
               <button

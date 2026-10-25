@@ -64,7 +64,7 @@ _The live checklist. Tick boxes as you go. Each phase / build has a "done when" 
 
 # Roadmap (D35)
 
-Three parts, each finished before the next. Every build ends with its "done when" check, tests, typecheck, lint, and a Progress log line. **Current: Build 7.** Build 4 closed early by the user (D55).
+Three parts, each finished before the next. Every build ends with its "done when" check, tests, typecheck, lint, and a Progress log line. **Current: Build 8.** Build 4 closed early by the user (D55).
 
 ## Part 1 — Understand
 
@@ -140,7 +140,7 @@ Three parts, each finished before the next. Every build ends with its "done when
 
 ### Build 7 — Live preview
 
-- [ ] chokidar watcher → working-tree analysis → diff vs HEAD → Preview view, changed first
+- [x] chokidar watcher → working-tree analysis → diff vs HEAD → Preview view, changed first
 
 **Done when:** editing a file updates Preview within ~5 s and shows the right changed boxes.
 
@@ -208,3 +208,4 @@ _One line per session: date, what got done, what's next, anything surprising._
 - 2026-10-25 — Build 5 built (D56): `agent/src/ask.ts` (map + selected box + last 3 turns → read-only agent → `{answer, cites}`; cites must be box ids, function ids or files, decoration stripped; one retry), live tool steps via `agentRunner`'s `onTool`, `POST /api/ask` streaming NDJSON, `catchup ask <path> "<q>" [--node id]`, Ask panel (chat, "Ask about this" on any box, cite chips, answer lights its files/systems/boxes, cited journey steps pulse in order). Live: two CLI/curl answers on ai-chatbot correct and grounded (rate limits: 7 tool calls, 22 s, got "limits identical" right; createDocument hand-off: 3 tool calls). Headless Chrome caught a crash (an effect returning `scrollIntoView`'s Promise) and Claude copying `[id]` brackets into cites; both fixed. Then the Anthropic credit ran out mid-check, so the "five questions with the right boxes lit" check is not done. 179 tests, typecheck, lint pass.
 - 2026-10-25 — Build 5 done. Back on Droid (provider switch, D51). Run failures (API errors, billing) are now retried as-is and reported as `RunError`, not as validation failures. Check in headless Chrome on ai-chatbot, five questions through the Ask panel: artifact streaming to the side panel, resuming a dropped stream (found it's a stub: `GET …/stream` returns 204), where the reply is saved and what happens on failure (on the Flows view: "Save the reply" pulses), who can read a private chat (owner only), uploads (Vercel Blob, JPEG/PNG ≤ 5 MB). All five correct against `docs/targets/ai-chatbot.md`, 11–23 s, 2–8 files read each, every cite resolved, the right boxes lit. Fixes from the check: the canvas shrinks beside the Ask panel; cited files light the systems they call (upload → Blob storage); file chips show their folder. Next: Build 6.
 - 2026-10-25 — Build 6 done (D57). `history`: worktrees, renames, commits, checkpoints. `agent/src/evolve.ts` (tree at B from tree at A, code first) and `changes.ts` (change set). CLI: `init/understand --at <ref> [--from <ref>]`, `diff <from> <to>`. New fixture `fixtures/tiny-changes` (v1 → v2 with four planted changes); test builds a real two-commit repo, analyzes both commits in worktrees, evolves with fake Claude and asserts the exact change set. Live through Droid: v1 tree 4 calls / 38 s, evolve to v2 2 calls / 10 s, all planted changes and nothing else. Bugs found on the way: symlinked repo paths lost every local import (macOS tmp); handler-spanning steps tripped the order rule. 187 tests, typecheck, lint pass. Next: Build 7 (live preview).
+- 2026-10-25 — Build 7 done (D58). `web/src/server/preview.ts` (watch → analyze working tree → offline evolve → change set), `/api/preview(+/canvas)`, Preview tab with change count. Offline mode in `evolve` (no Claude). Test: a real watcher on a temp repo sees v2's planted changes saved over v1 within 5 s. Checked in headless Chrome on the planted repo (behavior facts, new route, Redis, marked boxes) and timed on ai-chatbot: 3.2 s from save to updated preview. Next: Build 8 (Ask about changes).

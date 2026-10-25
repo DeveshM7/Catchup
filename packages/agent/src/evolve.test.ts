@@ -48,73 +48,8 @@ function fakes(answers: Record<string, unknown>): { runnerFor: (pass: string) =>
 }
 
 const SEND = "ui:components/composer.tsx#Composer.submit";
-const step = (title: string, kind: string, functions: string[]) => ({ title, short: `${title}.`, long: `${title}, at length.`, kind, functions, open: false });
-
-const v1Answers = {
-  survey: {
-    summary: "A chat page that saves chats and streams a title back.",
-    parts: [
-      { title: "Chat screen", short: "What the user sees.", long: "Page and components.", paths: ["components", "app/page.tsx", "lib/fetcher.ts"] },
-      { title: "Server", short: "Routes and actions.", long: "Handles requests.", paths: ["app/api", "app/actions.ts"] },
-      { title: "Data and auth", short: "Database and user checks.", long: "Postgres queries and the user check.", paths: ["lib/db.ts", "lib/auth.ts"] },
-    ],
-    journeys: [{ entry: SEND, title: "Sending a message", short: "You send a message.", long: "The browser posts it." }],
-    otherFlows: [
-      "ui:components/chat.tsx#Chat.onClick:button",
-      "ui:components/chat.tsx#Chat.onClick:button~2",
-      "action:app/actions.ts#rename",
-      "http:DELETE /api/chat",
-      "http:DELETE /api/history",
-      "http:GET /api/history",
-    ].map((family) => ({ family, line: `Line for ${family}.` })),
-  },
-  "part:Chat screen": { leaf: true, children: [] },
-  "part:Server": { leaf: true, children: [] },
-  "journey:Sending a message": {
-    steps: [
-      step("Send the message", "main", ["components/composer.tsx#Composer.submit"]),
-      step("Check the user", "check", ["app/api/chat/route.ts#POST", "lib/auth.ts#requireUser"]),
-      step("Save the chat", "main", ["lib/db.ts#saveChat"]),
-      step("Show the title", "main", ["components/parts.ts#handlePart"]),
-    ],
-  },
-  extras: {
-    glossary: [
-      { term: "Chat", meaning: "A saved conversation.", cites: ["lib/db.ts"] },
-      { term: "Fetcher", meaning: "Loads JSON.", cites: ["lib/fetcher.ts#fetcher"] },
-      { term: "Title", meaning: "Streamed name.", cites: ["components/parts.ts#handlePart"] },
-    ],
-    startHere: [
-      { file: "app/api/chat/route.ts", why: "The server side." },
-      { file: "lib/fetcher.ts", why: "How data loads." },
-    ],
-    changes: [
-      { task: "Change what is saved", cites: ["lib/db.ts#saveChat"] },
-      { task: "Change the user check", cites: ["lib/auth.ts#requireUser"] },
-      { task: "Add a button", cites: ["components/chat.tsx"] },
-    ],
-    surprises: [],
-  },
-};
-
-const v2Answers = {
-  relabel: {
-    items: [
-      { key: "part1", title: "Server", short: "Routes, actions and export.", long: "Handles requests, including the new export." },
-      { key: "part2", title: "Data and auth", short: "Database, export and user checks.", long: "Postgres queries, chat export and the user check." },
-      { key: "journey3", title: "Sending a message", short: "You send a message.", long: "The browser posts it; saving also counts in Redis." },
-    ],
-    otherFlows: [{ family: "http:GET /api/export", line: "Download all chats as JSON." }],
-  },
-  "update:Sending a message": {
-    steps: [
-      step("Send the message", "main", ["components/composer.tsx#Composer.submit"]),
-      step("Accept the message", "main", ["app/api/chat/route.ts#POST"]),
-      { ...step("Save the chat", "main", ["lib/db.ts#saveChat"]), short: "Saved in Postgres, counted in Redis." },
-      step("Show the title", "main", ["components/parts.ts#handlePart"]),
-    ],
-  },
-};
+/** Fake Claude answers for v1 (fresh Understand) and v2 (relabel + journey update), shared with the preview test. */
+const { v1: v1Answers, v2: v2Answers } = JSON.parse(readFileSync(join(FIXTURE, "answers.json"), "utf8")) as { v1: Record<string, unknown>; v2: Record<string, unknown> };
 
 type Commit = { sha: string; facts: Facts; inputs: (runnerFor: (pass: string) => Runner, previous?: Understanding) => UnderstandInputs };
 
@@ -222,5 +157,30 @@ describe("evolve and diff on planted changes (Build 6)", async () => {
     const none = diffTrees({ understanding: treeA, facts: a.facts }, { understanding: self.understanding, facts: a.facts }, new Map());
     expect(none.nodes).toEqual({ added: [], removed: [], changed: [] });
     expect(none.journeys).toEqual([]);
+  });
+});
+
+describe("offline evolve for the live preview (Build 7)", async () => {
+  const repo = plantedRepo();
+  const a = await analyzeCommit(repo, "HEAD~1");
+  const b = await analyzeCommit(repo, "HEAD");
+  const renames = renamesBetween(repo, a.sha, b.sha);
+  const treeA = (await understand(a.inputs(fakes(v1Answers).runnerFor))).understanding;
+
+  it("makes no Claude call, keeps texts, drops steps whose code is gone, and still reports every planted change", async () => {
+    const none = fakes({});
+    const { understanding: preview } = await evolve({ ...b.inputs(none.runnerFor), from: { understanding: treeA, facts: a.facts }, renames, offline: true });
+    expect(none.calls).toEqual([]);
+    const journey = preview.nodes[`journey:${SEND}`]!;
+    const steps = (journey.children as string[]).map((id) => preview.nodes[id]!);
+    expect(steps.map((s) => [s.title, s.anchor.functions])).toEqual([
+      ["Send the message", ["components/composer.tsx#Composer.submit"]],
+      ["Check the user", ["app/api/chat/route.ts#POST"]],
+      ["Save the chat", ["lib/db.ts#saveChat"]],
+      ["Show the title", ["components/parts.ts#handlePart"]],
+    ]);
+    const changes = diffTrees({ understanding: treeA, facts: a.facts }, { understanding: preview, facts: b.facts }, renames);
+    expect(changes.journeys[0]).toMatchObject({ systemsAdded: ["Redis"], checksRemoved: ["Check the user"], functionsRemoved: ["lib/auth.ts#requireUser"] });
+    expect(changes.entryPoints.added).toEqual(["GET /api/export"]);
   });
 });

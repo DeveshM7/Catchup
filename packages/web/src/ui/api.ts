@@ -1,4 +1,4 @@
-import type { AskEvent, AskRequest, MapData, MapGraph, SourceView, TreeData, TreeView } from "../shared/types";
+import type { AskEvent, AskRequest, MapData, MapGraph, PreviewView, SourceView, TreeData, TreeView } from "../shared/types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
@@ -36,6 +36,10 @@ export const api = {
     cached(calls, `fn:${fn}:${entry ?? ""}`, () => request(`/api/calls?fn=${q(fn)}${entry ? `&entry=${q(entry)}` : ""}`)),
   source: (fn: string): Promise<SourceView> => cached(sources, fn, () => request(`/api/source?fn=${q(fn)}`)),
   map: (): Promise<MapData> => request("/api/map"),
+  /** The live preview's latest state (Build 7); not cached, it changes with every save. */
+  preview: (): Promise<PreviewView> => request("/api/preview"),
+  /** A canvas of the working tree's tree; keyed by when the preview was computed. */
+  previewCanvas: (id: string, version: string): Promise<MapGraph> => cached(canvases, `preview:${version}:${id}`, () => request(`/api/preview/canvas?id=${q(id)}`)),
   /** Asks a question; `onEvent` gets each tool step as it happens, then the answer or an error (Build 5). */
   async ask(body: AskRequest, onEvent: (event: AskEvent) => void): Promise<void> {
     const res = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });

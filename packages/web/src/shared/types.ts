@@ -112,3 +112,42 @@ export type AskReply = { answer: string; nodes: string[]; functions: string[]; f
 
 /** `POST /api/ask` streams these, one JSON object per line. */
 export type AskEvent = { type: "step"; step: AskStep } | { type: "answer"; reply: AskReply } | { type: "error"; error: string };
+
+/** A box that changed between two trees (Build 6): what about it changed. */
+export type NodeChangeView = { id: string; kind: "system" | "part" | "journey" | "step"; title: string; what: string[] };
+
+export type JourneyChangeView = {
+  id: string;
+  title: string;
+  systemsAdded: string[];
+  systemsRemoved: string[];
+  stepsAdded: string[];
+  stepsRemoved: string[];
+  checksRemoved: string[];
+  functionsAdded: string[];
+  functionsRemoved: string[];
+};
+
+/** What changed between two commits, or between HEAD and the working tree (same shape as the agent's ChangeSet). */
+export type ChangeSetView = {
+  from: string;
+  to: string;
+  files: { added: string[]; removed: string[]; renamed: { from: string; to: string }[]; changed: string[] };
+  entryPoints: { added: string[]; removed: string[] };
+  systems: { added: string[]; removed: string[] };
+  nodes: { added: NodeChangeView[]; removed: NodeChangeView[]; changed: NodeChangeView[] };
+  journeys: JourneyChangeView[];
+};
+
+/** The live preview (Build 7): uncommitted changes against HEAD, recomputed on every save. */
+export type PreviewView = {
+  status: "idle" | "analyzing" | "off";
+  updatedAt: string | null;
+  durationMs: number;
+  runs: number;
+  error: string | null;
+  head: string;
+  changes: ChangeSetView | null;
+  /** The working tree's understanding tree (HEAD's, carried through the changes without Claude). */
+  tree: TreeData | null;
+};

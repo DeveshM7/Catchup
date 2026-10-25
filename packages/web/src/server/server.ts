@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import type { Understanding } from "@catchup/agent";
 import { createServer, type Plugin, type ViteDevServer } from "vite";
-import type { AskEvent, AskRequest, AskStep, MapGraph, SourceView, TreeData } from "../shared/types.js";
+import type { AskEvent, AskRequest, AskStep, MapGraph, PreviewView, SourceView, TreeData } from "../shared/types.js";
+import { Preview, type PreviewResult } from "./preview.js";
 import { buildMap, callsOf, treeView, type DashboardInputs } from "./data.js";
 import { canvasGraph, treeData } from "./understanding.js";
 
@@ -146,14 +147,53 @@ async function streamAsk(inputs: DashboardInputs, state: TreeState, req: Incomin
   res.end();
 }
 
+/** The preview as the UI reads it; tree data and canvases are computed once per result. */
+class PreviewApi {
+  private views = new WeakMap<PreviewResult, TreeData>();
+  private canvases = new WeakMap<PreviewResult, Map<string, Promise<MapGraph | undefined>>>();
+
+  constructor(
+    private readonly inputs: DashboardInputs,
+    private readonly preview: Preview | undefined,
+  ) {}
+
+  private inputsOf(r: PreviewResult): Parameters<typeof treeData>[0] {
+    return { repoRoot: this.inputs.repoRoot, facts: r.facts, snapshot: r.snapshot, signals: r.signals, understanding: r.understanding };
+  }
+
+  view(): PreviewView {
+    const head = this.inputs.facts.sha;
+    if (!this.preview) return { status: "off", updatedAt: null, durationMs: 0, runs: 0, error: null, head, changes: null, tree: null };
+    const s = this.preview.current();
+    const r = s.result;
+    let tree = r ? this.views.get(r) : undefined;
+    if (r && !tree) {
+      tree = treeData(this.inputsOf(r));
+      this.views.set(r, tree);
+    }
+    return { status: s.status, updatedAt: s.updatedAt, durationMs: s.durationMs, runs: s.runs, error: s.error, head, changes: r?.changes ?? null, tree: tree ?? null };
+  }
+
+  canvas(id: string): Promise<MapGraph | undefined> {
+    const r = this.preview?.current().result;
+    if (!r) return Promise.resolve(undefined);
+    const cache = this.canvases.get(r) ?? new Map<string, Promise<MapGraph | undefined>>();
+    this.canvases.set(r, cache);
+    const hit = cache.get(id) ?? canvasGraph(this.inputsOf(r), id);
+    cache.set(id, hit);
+    return hit;
+  }
+}
+
 /**
  * JSON API over stored analysis (127.0.0.1 only): GET /api/understanding, /api/canvas?id=, /api/calls?entry=&fn=,
  * /api/source?fn=, /api/map; POST /api/open?id= runs the Open pass, POST /api/ask streams an answer (Build 5). Only Open writes.
  */
-function apiPlugin(inputs: DashboardInputs): Plugin {
+function apiPlugin(inputs: DashboardInputs, preview: Preview | undefined): Plugin {
   const map = buildMap(inputs);
   const trees = new Map(inputs.trees.map((t) => [t.entryPoint.id, t]));
   const state = new TreeState(inputs);
+  const previewApi = new PreviewApi(inputs, preview);
   return {
     name: "catchup-api",
     configureServer(server: ViteDevServer) {
@@ -176,6 +216,8 @@ function apiPlugin(inputs: DashboardInputs): Plugin {
         }
         if (req.method !== "GET") return send(res, 405, { error: "read-only" });
         if (url.pathname === "/api/understanding") return reply(res, Promise.resolve(state.data()), "no understanding yet; run: catchup understand <path>");
+        if (url.pathname === "/api/preview") return send(res, 200, previewApi.view());
+        if (url.pathname === "/api/preview/canvas") return reply(res, previewApi.canvas(param("id")), "no preview canvas for this node");
         if (url.pathname === "/api/canvas") return reply(res, state.canvas(param("id")), "no canvas for this node");
         if (url.pathname === "/api/map") return reply(res, map, "no map");
         if (url.pathname === "/api/calls") {
@@ -198,16 +240,29 @@ function apiPlugin(inputs: DashboardInputs): Plugin {
   };
 }
 
+export type DashboardOptions = { port?: number; /** Watch the working tree for the live preview (Build 7). */ preview?: boolean };
+
 /** Starts the dashboard on localhost only; nothing is written to the repo except by the Open pass. */
-export async function startDashboard(inputs: DashboardInputs, port = 5173): Promise<{ url: string; close: () => Promise<void> }> {
+export async function startDashboard(inputs: DashboardInputs, options: DashboardOptions = {}): Promise<{ url: string; close: () => Promise<void> }> {
+  const port = options.port ?? 5173;
+  const preview =
+    options.preview && inputs.understanding ? new Preview({ repoRoot: inputs.repoRoot, head: { understanding: inputs.understanding, facts: inputs.facts } }) : undefined;
+  preview?.start();
   const server = await createServer({
     root: UI_ROOT,
     configFile: false,
-    plugins: [react(), apiPlugin(inputs)],
-    server: { port, host: "127.0.0.1", strictPort: false },
+    plugins: [react(), apiPlugin(inputs, preview)],
+    // Saves in the analyzed repo must not reload the dashboard itself.
+    server: { port, host: "127.0.0.1", strictPort: false, watch: { ignored: [`${inputs.repoRoot}/**`] } },
     logLevel: "warn",
   });
   await server.listen();
   const url = server.resolvedUrls?.local[0] ?? `http://127.0.0.1:${port}/`;
-  return { url, close: () => server.close() };
+  return {
+    url,
+    close: async () => {
+      await preview?.stop();
+      await server.close();
+    },
+  };
 }

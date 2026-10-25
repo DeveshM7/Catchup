@@ -442,7 +442,7 @@ async function open(target: string, port: number, maxCalls: number): Promise<voi
     const { question, ...options } = request;
     return runAsk(ws, u, question, options, maxCalls, onStep);
   };
-  const { url } = await startDashboard({ ...ws, ...(understanding ? { understanding } : {}), open: openFromDashboard(ws, maxCalls), ask }, port);
+  const { url } = await startDashboard({ ...ws, ...(understanding ? { understanding } : {}), open: openFromDashboard(ws, maxCalls), ask }, { port, preview: true });
   console.log(`Catchup dashboard: ${url}`);
   if (!understanding) console.log(`(no understanding yet; run: catchup understand ${target})`);
   console.log("Press Ctrl+C to stop.");

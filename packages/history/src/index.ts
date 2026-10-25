@@ -129,3 +129,9 @@ export function pickCheckpoints(commits: Commit[], count: number): Commit[] {
   }
   return commits.filter((c) => chosen.has(c));
 }
+
+/** Files renamed in the working tree (staged or not) since HEAD. */
+export function workingRenames(repoRoot: string): Map<string, string> {
+  return parseRenames(git(repoRoot, ["diff", "-M", "--relative", "--name-status", "-z", "HEAD"]));
+}
+

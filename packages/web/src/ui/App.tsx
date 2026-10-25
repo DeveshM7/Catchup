@@ -9,6 +9,7 @@ import { GraphView, Legend } from "./GraphView";
 import { Home } from "./Home";
 import { entryName, MethodLabel, Prose } from "./labels";
 import { Panel } from "./panels";
+import { changeCount, PreviewPage, usePreview } from "./Preview";
 import { formatRoute, parseRoute, type Route } from "./route";
 import { Search } from "./Search";
 import { StepsCanvas } from "./StepsCanvas";
@@ -61,6 +62,7 @@ export function App() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [about, setAbout] = useState<string | null>(null);
   const [litTurn, setLitTurn] = useState<Turn | null>(null);
+  const preview = usePreview(route.view === "preview");
 
   useEffect(() => {
     api.understanding().then(setData, (e: unknown) => setError(String(e)));
@@ -175,6 +177,11 @@ export function App() {
             {tab("arch", "Architecture", { view: "arch", id: route.view === "arch" ? route.id : "root" })}
             {tab("flows", "Flows", { view: "flows", id: flowParent?.id ?? data.journeys[0] ?? "" })}
             {tab("map", "Full map", { view: "map" })}
+            {preview && preview.status !== "off" && (
+              <button className={route.view === "preview" ? "active" : ""} onClick={() => go({ view: "preview" })}>
+                Preview{changeCount(preview.changes) > 0 && <span className="badge">{changeCount(preview.changes)}</span>}
+              </button>
+            )}
           </nav>
           <div className="crumbs">
             {crumbs.map((c, i) => (
@@ -234,6 +241,8 @@ export function App() {
         )}
 
         {route.view === "map" && <FullMap />}
+
+        {route.view === "preview" && <PreviewPage view={preview} mode={mode} onSelect={select} />}
       </main>
 
       {sel && (

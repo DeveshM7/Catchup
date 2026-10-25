@@ -287,3 +287,34 @@ button.where { margin-left: 0; }
 .small { font-size: 12px; }
 @keyframes cited-pulse { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 40% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--c) 45%, transparent); } }
 .step-box.cited { animation: cited-pulse 1.4s ease-in-out calc(var(--i, 0) * .45s) 2 both; }
+
+/* Preview (Build 7) */
+.tabs .badge { margin-left: 6px; font-size: 10.5px; font-family: var(--mono); background: #fdf3e3; color: #b26a12; border: 1px solid #f3d3a2; border-radius: 999px; padding: 0 6px; }
+.preview .hero h1 { margin: 6px 0 4px; }
+.change-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.change-card { padding: 14px 18px; }
+.change-card h3 { margin: 0 0 8px; font-size: 15px; }
+.facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 13.5px; }
+.facts li { padding-left: 18px; position: relative; }
+.facts li::before { position: absolute; left: 0; font-family: var(--mono); font-weight: 700; }
+.facts li.add::before { content: "+"; color: #2f8a3b; }
+.facts li.remove::before { content: "−"; color: var(--err); }
+.facts li.warn::before { content: "!"; color: #c27a12; }
+.facts li.warn { color: #8a5a0a; }
+.fn-delta { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+.inline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+code.added { background: #edf6e9; border-color: #cfe5c8; color: #2f6f26; }
+code.removed { background: #fdedf2; border-color: #f1c0cf; color: #a3304f; text-decoration: line-through; }
+.files-delta { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+.files-delta .add { color: #2f6f26; }
+.files-delta .changed { color: #8a5a0a; }
+.files-delta .remove { color: #a3304f; }
+.node.st-added { border-style: solid; box-shadow: 0 0 0 3px #cfe5c8; }
+.node.st-changed { box-shadow: 0 0 0 3px #f3d3a2; }
+.node.st-touched { box-shadow: 0 0 0 2px #f6e2c3; }
+.st-badge { position: absolute; top: -9px; left: 12px; font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; padding: 0 6px; border-radius: 999px; border: 1px solid; background: var(--surface); }
+.st-badge.added { color: #2f6f26; border-color: #cfe5c8; }
+.st-badge.changed { color: #8a5a0a; border-color: #f3d3a2; }
+.st-badge.touched { color: #9a7a3a; border-color: #f0dcb8; }
+.preview { display: flex; flex-direction: column; gap: 16px; }
+.preview .parts-canvas { height: 520px; }

@@ -36,6 +36,11 @@ export type EvolveInputs = UnderstandInputs & {
   from: { understanding: Understanding; facts: Facts };
   /** Files renamed between the two commits, old path → new path. */
   renames: Map<string, string>;
+  /**
+   * No Claude calls (live preview, Build 7): texts stay as they were, changed journeys keep their steps with the code
+   * that still exists, new other flows get no line.
+   */
+  offline?: boolean;
 };
 
 /** Maps ids at A to ids at B: files through renames, functions through their file, entry points through their handler. */
@@ -371,7 +376,16 @@ export async function evolve(inputs: EvolveInputs): Promise<{ understanding: Und
   const lines = new Map<string, string>();
   const relabelBasis = hashOf(relabelPrompt(before.summary, items, flowBriefs));
   const tasks: (() => Promise<void>)[] = [];
-  if (items.length || flowBriefs.length) {
+  if (inputs.offline) {
+    for (const plan of plans) {
+      const reached = journeyRules(plan.tree).allowed;
+      const kept = plan.steps.flatMap((s) => {
+        const functions = s.anchor.functions.flatMap((f) => map.fn(f) ?? []).filter((f) => reached.has(f));
+        return functions.length ? [{ title: s.title, short: s.short, long: s.long, kind: s.stepKind ?? "main", functions, open: s.children !== "leaf" }] : [];
+      });
+      buildUpdatedSteps(work, before, plan, { steps: kept }, parts, map, before.nodes[plan.id]?.childrenBasis ?? before.basis);
+    }
+  } else if (items.length || flowBriefs.length) {
     tasks.push(async () => {
       const out = await ask(work, "relabel", relabelPrompt(before.summary, items, flowBriefs), RelabelOutput, (v) => checkRelabel(v, items, flowBriefs));
       for (const item of out.items) {
@@ -384,7 +398,7 @@ export async function evolve(inputs: EvolveInputs): Promise<{ understanding: Und
   }
   const topParts = parts.map((id) => work.nodes[id]!);
   const builders: (() => void)[] = [];
-  for (const plan of plans) {
+  for (const plan of inputs.offline ? [] : plans) {
     const prompt = updatePrompt(work, before, plan, map, before.summary, topParts);
     const rules = journeyRules(plan.tree);
     let out: StepsOutput | undefined;
