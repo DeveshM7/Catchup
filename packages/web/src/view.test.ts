@@ -57,7 +57,7 @@ describe("Ask (Build 5)", () => {
     const journey = node("j", { kind: "journey", children: ["s1", "s2"], files: ["app/route.ts", "lib/db.ts"] });
     const pg = node("system:Postgres", { kind: "system", files: ["lib/db.ts"] });
     const d = { ...data([journey, pg, ...steps]), files: { "lib/ai.ts": { path: "lib/ai.ts", loc: 1, flows: 1, systems: ["AI model"], functions: [] } } };
-    const scope = answerScope({ answer: "a", nodes: ["j", "system:Postgres"], functions: ["lib/ai.ts#run"], files: ["README.md"], steps: [] }, d);
+    const scope = answerScope({ answer: "a", nodes: ["j", "system:Postgres"], functions: ["lib/ai.ts#run"], files: ["README.md"], commits: [], steps: [] }, d);
     expect([...scope.files].sort()).toEqual(["README.md", "app/route.ts", "lib/ai.ts", "lib/db.ts"]);
     expect([...scope.systems]).toEqual(["system:Postgres", "system:AI model"]);
     expect([...scope.nodes!].sort()).toEqual(["j", "s1", "s2", "system:Postgres"]);

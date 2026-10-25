@@ -273,6 +273,7 @@ export function App() {
             setAsking(false);
             setLitTurn(null);
           }}
+          change={route.view === "preview" && preview?.changes ? { request: "preview", label: "uncommitted changes" } : null}
         />
       )}
     </div>

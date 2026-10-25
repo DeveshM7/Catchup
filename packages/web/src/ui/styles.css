@@ -318,3 +318,6 @@ code.removed { background: #fdedf2; border-color: #f1c0cf; color: #a3304f; text-
 .st-badge.touched { color: #9a7a3a; border-color: #f0dcb8; }
 .preview { display: flex; flex-direction: column; gap: 16px; }
 .preview .parts-canvas { height: 520px; }
+
+.chip.change { border-color: #f3d3a2; color: #8a5a0a; background: #fdf8ee; }
+.chip.commit { border-color: #cdd6e4; color: #3b5b8a; background: #f2f6fc; }

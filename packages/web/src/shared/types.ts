@@ -101,14 +101,20 @@ export type TreeView = { entry: string; label: string; partial: boolean; systems
 
 export type SourceView = { id: string; file: string; startLine: number; endLine: number; text: string };
 
-/** Ask (Build 5): a question about the code, optionally about one box, with the chat so far. */
-export type AskRequest = { question: string; node?: string; history?: { question: string; answer: string }[] };
+/** Ask (Build 5): a question about the code, optionally about one box or a change (Build 8), with the chat so far. */
+export type AskRequest = {
+  question: string;
+  node?: string;
+  history?: { question: string; answer: string }[];
+  /** Ask about uncommitted work (`"preview"`) or the commits between two trees. */
+  changes?: "preview" | { from: string; to: string };
+};
 
 /** One tool call the agent made while answering (shown live). */
 export type AskStep = { name: string; target: string; denied?: string };
 
 /** A checked answer: every cite resolved to a box, a function or a file. */
-export type AskReply = { answer: string; nodes: string[]; functions: string[]; files: string[]; steps: AskStep[] };
+export type AskReply = { answer: string; nodes: string[]; functions: string[]; files: string[]; commits: string[]; steps: AskStep[] };
 
 /** `POST /api/ask` streams these, one JSON object per line. */
 export type AskEvent = { type: "step"; step: AskStep } | { type: "answer"; reply: AskReply } | { type: "error"; error: string };
@@ -151,3 +157,7 @@ export type PreviewView = {
   /** The working tree's understanding tree (HEAD's, carried through the changes without Claude). */
   tree: TreeData | null;
 };
+
+/** A change an Ask question is about (Build 8): its change set and the commits that made it (none for uncommitted work). */
+export type ChangeContextView = { label: string; changes: ChangeSetView; commits: { sha: string; date: string; subject: string }[] };
+

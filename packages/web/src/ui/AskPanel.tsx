@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { AskReply, AskStep, TreeData } from "../shared/types";
+import type { AskReply, AskRequest, AskStep, TreeData } from "../shared/types";
 import { codeName, type Familiarity, type Selection } from "../shared/view";
 import { api } from "./api";
 
 /** One question and what came back. */
-export type Turn = { id: number; question: string; node?: string; steps: AskStep[]; reply?: AskReply; error?: string };
+export type Turn = { id: number; question: string; node?: string; change?: string; steps: AskStep[]; reply?: AskReply; error?: string };
 
 type Props = {
   data: TreeData;
@@ -19,6 +19,8 @@ type Props = {
   onLight: (turn: Turn) => void;
   onSelect: (sel: Selection) => void;
   onClose: () => void;
+  /** Questions are about this change while it is set (Build 8): the preview's, or a timelapse step's. */
+  change?: { request: NonNullable<AskRequest["changes"]>; label: string } | null;
 };
 
 const HISTORY = 3;
@@ -42,7 +44,17 @@ function AnswerText({ text }: { text: string }) {
     <>
       {text.split(/\n\s*\n/).map((block, i) => {
         const lines = block.split("\n").filter((l) => l.trim());
-        const list = lines.length > 0 && lines.every((l) => /^\s*(\d+\.|[-*])\s/.test(l));
+        const isItem = (l: string): boolean => /^\s*(\d+\.|[-*])\s/.test(l);
+        // "Leftovers:" followed by items: a lead-in line, then the list.
+        if (lines.length > 1 && !isItem(lines[0] ?? "") && lines.slice(1).every(isItem)) {
+          return (
+            <div key={i}>
+              <p>{inline(lines[0]!)}</p>
+              <AnswerText text={lines.slice(1).join("\n")} />
+            </div>
+          );
+        }
+        const list = lines.length > 0 && lines.every(isItem);
         if (list) {
           const items = lines.map((l, j) => <li key={j}>{inline(l.replace(/^\s*(\d+\.|[-*])\s/, ""))}</li>);
           return /^\s*\d/.test(lines[0] ?? "") ? <ol key={i}>{items}</ol> : <ul key={i}>{items}</ul>;
@@ -66,6 +78,9 @@ function Cites({ reply, data, mode, onSelect }: { reply: AskReply; data: TreeDat
       ))}
       {reply.functions.map((id) => (
         <button key={id} className="chip link mono" onClick={() => onSelect({ kind: "fn", id })}>{data.refs[id]?.name ?? id}()</button>
+      ))}
+      {reply.commits.map((sha) => (
+        <span key={sha} className="chip mono commit" title={sha}>{sha.slice(0, 7)}</span>
       ))}
       {reply.files.map((path) => (
         <button key={path} className="chip link mono" onClick={() => onSelect({ kind: "file", path })} title={path}>{path.split("/").slice(-2).join("/")}</button>
@@ -95,7 +110,7 @@ function Steps({ steps, done }: { steps: AskStep[]; done: boolean }) {
 }
 
 /** The Ask chat (Build 5): a read-only agent answers about the code; its answers cite boxes, functions and files. */
-export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onLight, onSelect, onClose }: Props) {
+export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onLight, onSelect, onClose, change }: Props) {
   const [question, setQuestion] = useState("");
   const end = useRef<HTMLDivElement>(null);
   const busy = turns.some((t) => !t.reply && !t.error);
@@ -110,10 +125,10 @@ export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onL
     const id = Date.now();
     const history = turns.flatMap((t) => (t.reply ? [{ question: t.question, answer: t.reply.answer }] : [])).slice(-HISTORY);
     setQuestion("");
-    setTurns((all) => [...all, { id, question: text, ...(about ? { node: about } : {}), steps: [] }]);
+    setTurns((all) => [...all, { id, question: text, ...(about ? { node: about } : {}), ...(change ? { change: change.label } : {}), steps: [] }]);
     const update = (change: Partial<Turn>): void => setTurns((all) => all.map((t) => (t.id === id ? { ...t, ...change } : t)));
     try {
-      await api.ask({ question: text, ...(about ? { node: about } : {}), history }, (event) => {
+      await api.ask({ question: text, ...(about ? { node: about } : {}), ...(change ? { changes: change.request } : {}), history }, (event) => {
         if (event.type === "step") setTurns((all) => all.map((t) => (t.id === id ? { ...t, steps: [...t.steps, event.step] } : t)));
         else if (event.type === "error") update({ error: event.error });
         else {
@@ -142,7 +157,8 @@ export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onL
         {turns.map((t) => (
           <div key={t.id} className={`ask-turn ${lit === t.id ? "lit" : ""}`}>
             <div className="ask-q">
-              {t.node && data.nodes[t.node] && <span className="chip">{data.nodes[t.node]!.title}</span>} {t.question}
+              {t.node && data.nodes[t.node] && <span className="chip">{data.nodes[t.node]!.title}</span>}
+              {t.change && <span className="chip change">{t.change}</span>} {t.question}
             </div>
             <Steps steps={t.steps} done={Boolean(t.reply || t.error)} />
             {t.error && <div className="ask-error">{t.error}</div>}
@@ -160,6 +176,11 @@ export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onL
         <div ref={end} />
       </div>
       <div className="ask-input">
+        {change && (
+          <div className="ask-about">
+            About <span className="chip change">{change.label}</span>
+          </div>
+        )}
         {aboutNode && (
           <div className="ask-about">
             About <span className="chip">{mode === "expert" ? codeName(aboutNode, data) : aboutNode.title}</span>
@@ -168,7 +189,7 @@ export function AskPanel({ data, mode, turns, setTurns, about, onAbout, lit, onL
         )}
         <textarea
           value={question}
-          placeholder={aboutNode ? `Ask about “${aboutNode.title}”…` : "How does sending a message work?"}
+          placeholder={change ? "What do these changes do? What could they break?" : aboutNode ? `Ask about “${aboutNode.title}”…` : "How does sending a message work?"}
           rows={3}
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => {

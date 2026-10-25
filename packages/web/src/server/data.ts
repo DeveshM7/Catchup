@@ -2,7 +2,7 @@ import { basename } from "node:path";
 import type { CallTree, Facts, FunctionFact, FunctionTreeNode, Signals, Snapshot, TreeNode } from "@catchup/analyzer";
 import { componentIndex } from "@catchup/analyzer";
 import type { Understanding } from "@catchup/agent";
-import type { AskReply, AskRequest, AskStep, EntryView, FunctionRef, MapData, MapEdge, MapNode, TreeNodeView, TreeView } from "../shared/types.js";
+import type { AskReply, AskRequest, AskStep, ChangeContextView, EntryView, FunctionRef, MapData, MapEdge, MapNode, TreeNodeView, TreeView } from "../shared/types.js";
 import { layoutMap } from "./layout.js";
 
 export type DashboardInputs = {
@@ -16,7 +16,7 @@ export type DashboardInputs = {
   /** Runs the Open pass for one node (D38) and returns the saved tree. Absent: nodes can't be opened from the UI. */
   open?: (understanding: Understanding, id: string) => Promise<Understanding>;
   /** Answers a question with a read-only agent (Build 5); `onStep` gets each tool call as it happens. */
-  ask?: (understanding: Understanding, request: AskRequest, onStep: (step: AskStep) => void) => Promise<Omit<AskReply, "steps">>;
+  ask?: (understanding: Understanding, request: AskRequest, onStep: (step: AskStep) => void, context?: ChangeContextView) => Promise<Omit<AskReply, "steps">>;
 };
 
 export function functionRef(fact: FunctionFact | undefined, id: string, componentOf: Map<string, string>): FunctionRef {

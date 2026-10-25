@@ -46,7 +46,7 @@ describe("checkAnswer", () => {
   it("accepts box ids, function ids and file paths, with the decoration Claude copies from the map", () => {
     expect(checkAnswer({ answer: "In `saveChat`.", cites: ["journey:ui:send#1", "lib/db.ts#saveChat", "lib/db.ts"] }, facts, u)).toEqual([]);
     expect(checkAnswer({ answer: "x", cites: ["[part:lib/db.ts]", "`lib/db.ts#saveChat()`"] }, facts, u)).toEqual([]);
-    expect(splitCites(["[part:lib/db.ts]", "`lib/db.ts#saveChat()`", "lib/db.ts#saveChat"], facts, u)).toEqual({ nodes: ["part:lib/db.ts"], functions: ["lib/db.ts#saveChat"], files: [] });
+    expect(splitCites(["[part:lib/db.ts]", "`lib/db.ts#saveChat()`", "lib/db.ts#saveChat"], facts, u)).toEqual({ nodes: ["part:lib/db.ts"], functions: ["lib/db.ts#saveChat"], files: [], commits: [] });
   });
 
   it("rejects unknown cites, no cites, too many words", () => {
@@ -80,6 +80,7 @@ describe("askQuestion", () => {
       nodes: ["journey:ui:send#1"],
       functions: ["lib/db.ts#saveChat"],
       files: ["app/api/chat/route.ts"],
+      commits: [],
     });
     expect(prompts).toHaveLength(2);
     expect(prompts[1]).toContain(`cite "lib/db.ts#save" is not a box id`);
@@ -89,3 +90,36 @@ describe("askQuestion", () => {
     await expect(askQuestion(base(fake([{ answer: "Somewhere.", cites: ["x.ts"] }]).runner))).rejects.toThrow(/failed validation twice/);
   });
 });
+
+describe("asking about a change (Build 8)", () => {
+  const sha = "45be7e580b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e";
+  const changes = {
+    label: "45be7e5 → 89707e7",
+    commits: [{ sha, date: "2026-01-01T00:00:00Z", subject: "Drop the auth check" }],
+    changes: {
+      from: "a", to: "b",
+      files: { added: [], removed: [], renamed: [], changed: ["app/api/chat/route.ts"] },
+      entryPoints: { added: [], removed: [] },
+      systems: { added: [], removed: [] },
+      nodes: { added: [], removed: [], changed: [] },
+      journeys: [{ id: "journey:ui:send", title: "Sending a message", systemsAdded: [], systemsRemoved: [], stepsAdded: [], stepsRemoved: [], checksRemoved: ["Check the user"], functionsAdded: [], functionsRemoved: ["lib/auth.ts#requireUser"] }],
+    },
+  };
+
+  it("briefs the agent with the change set and its commits", () => {
+    const prompt = askPrompt({ ...base(fake([]).runner), changes });
+    expect(prompt).toContain("=== The question is about a change: 45be7e5 → 89707e7 ===");
+    expect(prompt).toContain("  checks removed: Check the user");
+    expect(prompt).toContain("- 45be7e5 2026-01-01 Drop the auth check");
+    expect(prompt).toContain("or commits by their short sha");
+  });
+
+  it("accepts a listed commit as a cite and returns its full sha; rejects unlisted ones", async () => {
+    expect(checkAnswer({ answer: "x", cites: ["45be7e5", "deadbeef"] }, facts, u, changes.commits)).toEqual([
+      `cite "deadbeef" is not a box id, function id or source file path, or a listed commit`,
+    ]);
+    const { runner } = fake([{ answer: "The check was dropped in 45be7e5.", cites: ["45be7e5", "app/api/chat/route.ts"] }]);
+    expect(await askQuestion({ ...base(runner), changes })).toMatchObject({ commits: [sha], files: ["app/api/chat/route.ts"] });
+  });
+});
+

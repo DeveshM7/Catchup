@@ -1,5 +1,6 @@
 import type { Facts } from "@catchup/analyzer";
 import * as z from "zod/v4";
+import { formatChanges, type ChangeSet } from "./changes.js";
 import { askStructured, type Runner } from "./droid.js";
 import { commonDir, type Understanding, type UnderstandingNode } from "./tree.js";
 import { checkCount, words } from "./treecheck.js";
@@ -19,6 +20,12 @@ export type AskOutput = z.infer<typeof AskOutput>;
 
 export type AskTurn = { question: string; answer: string };
 
+/** A change to ask about (Build 8): uncommitted work, or the commits between two trees. */
+export type ChangeContext = { label: string; changes: ChangeSet; commits: { sha: string; date: string; subject: string }[] };
+
+const MAX_COMMITS = 40;
+const SHORT_SHA = 7;
+
 export type AskInputs = {
   facts: Facts;
   understanding: Understanding;
@@ -27,6 +34,8 @@ export type AskInputs = {
   node?: string;
   /** Earlier turns of this chat, oldest first. */
   history?: AskTurn[];
+  /** The question is about this change (Build 8). */
+  changes?: ChangeContext;
   /** Absolute folder holding the digests, and their file names (the agent may Read them). */
   digestDir: string;
   digestNames: string[];
@@ -36,8 +45,8 @@ export type AskInputs = {
   onRejected?: (job: string, problems: string[]) => void;
 };
 
-/** A checked answer: cites split by what they point at. */
-export type Answer = { answer: string; nodes: string[]; functions: string[]; files: string[] };
+/** A checked answer: cites split by what they point at (commits: full shas, Build 8). */
+export type Answer = { answer: string; nodes: string[]; functions: string[]; files: string[]; commits: string[] };
 
 function nodeLine(node: UnderstandingNode): string {
   const where = node.kind === "part" ? ` — ${commonDir(node.anchor.files) || "(several folders)"}, ${node.anchor.files.length} files` : "";
@@ -97,20 +106,42 @@ export function askPrompt(inputs: Omit<AskInputs, "runner">): string {
     "",
     ...(inputs.node ? [...selected(inputs.understanding, inputs.node), ""] : []),
     ...(history.length ? ["=== Earlier in this chat ===", ...history.flatMap((t) => [`Q: ${t.question}`, `A: ${t.answer}`]), ""] : []),
+    ...(inputs.changes ? changeSection(inputs.changes) : []),
     "=== Question ===",
     inputs.question,
     "",
     "Return:",
-    `- answer: at most ${ANSWER_WORDS.ask} words, plain and direct. Name code in backticks (\`saveChat\`, \`lib/db/queries.ts\`), not by id. If the code doesn't do what is asked, say so. Say what you are unsure of.`,
-    `- cites: 1–${MAX_CITES} things the answer is about, most relevant first, copied exactly: box ids from the map (in [ ]), function ids (\`path#name\`), or repo-relative file paths. Only things you saw in the code or the digests.`,
+    `- answer: at most ${ANSWER_WORDS.ask} words, plain and direct. Name code in backticks (\`saveChat\`, \`lib/db/queries.ts\`), not by id. If the code doesn't do what is asked, say so. Say what you are unsure of. Short paragraphs; a list puts each item on its own line starting with "- ".`,
+    `- cites: 1–${MAX_CITES} things the answer is about, most relevant first, copied exactly: box ids from the map (in [ ]), function ids (\`path#name\`), or repo-relative file paths${inputs.changes?.commits.length ? ", or commits by their short sha" : ""}. Only things you saw in the code, the digests or the change.`,
   ].join("\n");
+}
+
+/** The change being asked about: computed facts first, then the commits that made it. */
+function changeSection(c: ChangeContext): string[] {
+  const shown = c.commits.slice(-MAX_COMMITS);
+  return [
+    `=== The question is about a change: ${c.label} ===`,
+    "What changed (computed from the code; the code you can Read is the newer version):",
+    formatChanges(c.changes),
+    ...(shown.length
+      ? ["", `Commits (oldest first${c.commits.length > shown.length ? `, last ${shown.length} of ${c.commits.length}` : ""}):`, ...shown.map((m) => `- ${m.sha.slice(0, SHORT_SHA)} ${m.date.slice(0, 10)} ${m.subject}`)]
+      : ["(Not committed yet: there are no commits to cite.)"]),
+    "Say what changed and what it does to the app's behavior; when a commit did it, cite that commit.",
+    "",
+  ];
+}
+
+/** The full sha a cite names, when it is a listed commit (≥ 7 hex characters of it). */
+function commitOf(cite: string, commits: { sha: string }[] | undefined): string | undefined {
+  if (!commits || !/^[0-9a-f]{7,40}$/i.test(cite)) return undefined;
+  return commits.find((c) => c.sha.toLowerCase().startsWith(cite.toLowerCase()))?.sha;
 }
 
 /** A cite as written, without the decoration Claude copies from the map (`[id]`, backticks, `()`). */
 export const citeKey = (raw: string): string => raw.trim().replace(/^[[`]+|[\]`]+$/g, "").replace(/\(\)$/, "").trim();
 
 /** Problems with an answer; empty when every cite resolves. */
-export function checkAnswer(out: AskOutput, facts: Facts, u: Understanding): string[] {
+export function checkAnswer(out: AskOutput, facts: Facts, u: Understanding, commits?: { sha: string }[]): string[] {
   const files = new Set(facts.files.map((f) => f.path));
   const functions = new Set(facts.functions.map((f) => f.id));
   const problems = checkCount("cites", out.cites.length, 1, MAX_CITES);
@@ -118,19 +149,21 @@ export function checkAnswer(out: AskOutput, facts: Facts, u: Understanding): str
   if (n > ANSWER_WORDS.limit) problems.push(`answer has ${n} words (at most ${ANSWER_WORDS.ask})`);
   for (const raw of out.cites) {
     const cite = citeKey(raw);
-    if (u.nodes[cite] || functions.has(cite) || files.has(cite)) continue;
-    problems.push(`cite "${raw}" is not a box id, function id or source file path`);
+    if (u.nodes[cite] || functions.has(cite) || files.has(cite) || commitOf(cite, commits)) continue;
+    problems.push(`cite "${raw}" is not a box id, function id or source file path${commits?.length ? ", or a listed commit" : ""}`);
   }
   return problems;
 }
 
-export function splitCites(cites: string[], facts: Facts, u: Understanding): Omit<Answer, "answer"> {
+export function splitCites(cites: string[], facts: Facts, u: Understanding, commits?: { sha: string }[]): Omit<Answer, "answer"> {
   const functions = new Set(facts.functions.map((f) => f.id));
+  const files = new Set(facts.files.map((f) => f.path));
   const unique = [...new Set(cites.map(citeKey))];
   return {
     nodes: unique.filter((c) => u.nodes[c] !== undefined),
     functions: unique.filter((c) => u.nodes[c] === undefined && functions.has(c)),
-    files: unique.filter((c) => u.nodes[c] === undefined && !functions.has(c)),
+    files: unique.filter((c) => u.nodes[c] === undefined && !functions.has(c) && files.has(c)),
+    commits: [...new Set(unique.flatMap((c) => commitOf(c, commits) ?? []))],
   };
 }
 
@@ -140,10 +173,10 @@ export async function askQuestion(inputs: AskInputs): Promise<Answer> {
     job: "ask",
     prompt: askPrompt(inputs),
     schema: AskOutput,
-    check: (value) => checkAnswer(value, inputs.facts, inputs.understanding),
+    check: (value) => checkAnswer(value, inputs.facts, inputs.understanding, inputs.changes?.commits),
     runner: inputs.runner,
     onCall: inputs.onCall,
     onRejected: inputs.onRejected,
   });
-  return { answer: out.answer, ...splitCites(out.cites, inputs.facts, inputs.understanding) };
+  return { answer: out.answer, ...splitCites(out.cites, inputs.facts, inputs.understanding, inputs.changes?.commits) };
 }

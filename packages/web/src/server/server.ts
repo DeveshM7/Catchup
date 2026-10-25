@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import type { Understanding } from "@catchup/agent";
 import { createServer, type Plugin, type ViteDevServer } from "vite";
-import type { AskEvent, AskRequest, AskStep, MapGraph, PreviewView, SourceView, TreeData } from "../shared/types.js";
+import type { AskEvent, AskRequest, AskStep, ChangeContextView, ChangeSetView, MapGraph, PreviewView, SourceView, TreeData } from "../shared/types.js";
+import { commitsBetween } from "@catchup/history";
+import { loadChanges } from "@catchup/store";
 import { Preview, type PreviewResult } from "./preview.js";
 import { buildMap, callsOf, treeView, type DashboardInputs } from "./data.js";
 import { canvasGraph, treeData } from "./understanding.js";
@@ -119,11 +121,28 @@ export function parseAsk(body: string): AskRequest {
         return typeof turn?.question === "string" && typeof turn.answer === "string" ? [{ question: turn.question, answer: turn.answer }] : [];
       })
     : [];
-  return { question, ...(typeof raw.node === "string" && raw.node ? { node: raw.node } : {}), ...(history.length ? { history } : {}) };
+  const c = raw.changes as Record<string, unknown> | string | undefined;
+  const changes =
+    c === "preview" ? ("preview" as const) : c && typeof c === "object" && typeof c.from === "string" && typeof c.to === "string" ? { from: c.from, to: c.to } : undefined;
+  return { question, ...(typeof raw.node === "string" && raw.node ? { node: raw.node } : {}), ...(history.length ? { history } : {}), ...(changes ? { changes } : {}) };
+}
+
+/** The change a question is about (Build 8): the live preview's, or a stored change set and its commits. */
+function changeContext(inputs: DashboardInputs, preview: Preview | undefined, changes: AskRequest["changes"]): ChangeContextView | undefined {
+  if (changes === undefined) return undefined;
+  if (changes === "preview") {
+    const set = preview?.current().result?.changes;
+    if (!set) throw new Error("the live preview has no result yet");
+    return { label: `uncommitted changes (working tree against HEAD ${inputs.facts.sha.slice(0, 7)})`, changes: set, commits: [] };
+  }
+  const set = loadChanges<ChangeSetView>(inputs.repoRoot, changes.from, changes.to);
+  if (!set) throw new Error(`no change set ${changes.from.slice(0, 9)}..${changes.to.slice(0, 9)}; run: catchup diff <path> ${changes.from.slice(0, 9)} ${changes.to.slice(0, 9)}`);
+  const commits = commitsBetween(inputs.repoRoot, changes.from, changes.to).map(({ sha, date, subject }) => ({ sha, date, subject }));
+  return { label: `${changes.from.slice(0, 7)} → ${changes.to.slice(0, 7)}`, changes: set, commits };
 }
 
 /** Streams an Ask run as newline-delimited JSON events: each tool call, then the answer (or an error). */
-async function streamAsk(inputs: DashboardInputs, state: TreeState, req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function streamAsk(inputs: DashboardInputs, state: TreeState, preview: Preview | undefined, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const write = (event: AskEvent): void => {
     res.write(`${JSON.stringify(event)}\n`);
   };
@@ -136,10 +155,16 @@ async function streamAsk(inputs: DashboardInputs, state: TreeState, req: Incomin
     if (!inputs.ask) throw new Error("asking is not available here");
     if (request.node !== undefined && !u.nodes[request.node]) throw new Error(`no node "${request.node}"`);
     const steps: AskStep[] = [];
-    const reply = await inputs.ask(u, request, (step) => {
-      steps.push(step);
-      write({ type: "step", step });
-    });
+    const context = changeContext(inputs, preview, request.changes);
+    const reply = await inputs.ask(
+      u,
+      request,
+      (step) => {
+        steps.push(step);
+        write({ type: "step", step });
+      },
+      context,
+    );
     write({ type: "answer", reply: { ...reply, steps } });
   } catch (e) {
     write({ type: "error", error: errorText(e) });
@@ -203,7 +228,7 @@ function apiPlugin(inputs: DashboardInputs, preview: Preview | undefined): Plugi
         const param = (name: string): string => url.searchParams.get(name) ?? "";
         if (url.pathname === "/api/ask") {
           if (req.method !== "POST") return send(res, 405, { error: "use POST" });
-          void streamAsk(inputs, state, req, res);
+          void streamAsk(inputs, state, preview, req, res);
           return;
         }
         if (url.pathname === "/api/open") {

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCallTrees, type Signals, type Snapshot } from "@catchup/analyzer";
-import { renamesBetween } from "@catchup/history";
+import { commitsBetween, renamesBetween } from "@catchup/history";
 import {
   agentRunner,
   anthropicRunner,
@@ -21,6 +21,7 @@ import {
   understand,
   type Explained,
   type Answer,
+  type ChangeContext,
   type PassLog,
   type ToolCallLog,
   type Provider,
@@ -49,7 +50,7 @@ export function usage(): string {
     "  diff <path> <from> <to>        what changed between two commits with trees (files, entry points, systems, boxes, journeys)",
     '  understand <path> --open "<node id>"     write the children of an unopened node',
     "  open <path> [--port N]         show the understanding tree in your browser (opening a box or asking calls Claude)",
-    '  ask <path> "<question>" [--node "<node id>"]   ask a read-only agent about the code; answers cite real code',
+    '  ask <path> "<question>" [--node "<node id>"] [--changes <from>..<to>]   ask a read-only agent; answers cite real code (and commits)',
     "",
     "Claude is reached through Droid (FACTORY_API_KEY) by default; CATCHUP_PROVIDER=anthropic uses the Anthropic API (ANTHROPIC_API_KEY).",
   ].join("\n");
@@ -398,7 +399,7 @@ function openFromDashboard(ws: Workspace, maxCalls: number): (understanding: Und
   };
 }
 
-type AskOptions = { node?: string; history?: { question: string; answer: string }[] };
+type AskOptions = { node?: string; history?: { question: string; answer: string }[]; changes?: ChangeContext };
 
 /** One Ask run (Build 5): a read-only agent answers with checked cites; logged like any pass (D38). */
 async function runAsk(ws: Workspace, understanding: Understanding, question: string, options: AskOptions, maxCalls: number, onTool?: (call: ToolCallLog) => void): Promise<Answer> {
@@ -424,23 +425,32 @@ async function runAsk(ws: Workspace, understanding: Understanding, question: str
   }
 }
 
-async function askCommand(target: string, question: string, node: string | undefined, maxCalls: number): Promise<void> {
+async function askCommand(target: string, question: string, node: string | undefined, range: string | undefined, maxCalls: number): Promise<void> {
   const ws = workspace(target);
   const understanding = loadUnderstanding<Understanding>(ws.repoRoot, ws.sha);
   if (!understanding) throw new Error(`no understanding for ${ws.sha.slice(0, 9)} yet; run: catchup understand ${target}`);
-  const answer = await runAsk(ws, understanding, question, node ? { node } : {}, maxCalls, (call) =>
+  let changes: ChangeContext | undefined;
+  if (range !== undefined) {
+    const [fromRef, toRef] = range.split("..");
+    if (!fromRef || !toRef) throw new Error("--changes needs <from>..<to>");
+    const from = resolveCommit(ws.repoRoot, fromRef);
+    const to = resolveCommit(ws.repoRoot, toRef);
+    const commits = commitsBetween(ws.repoRoot, from, to).map(({ sha, date, subject }) => ({ sha, date, subject }));
+    changes = { label: `${from.slice(0, 7)} → ${to.slice(0, 7)}`, changes: changeSet(ws.repoRoot, from, to), commits };
+  }
+  const answer = await runAsk(ws, understanding, question, { ...(node ? { node } : {}), ...(changes ? { changes } : {}) }, maxCalls, (call) =>
     console.error(`  ${call.denied ? "denied" : "tool"}: ${call.name} ${call.target}`),
   );
   console.log(answer.answer);
-  console.log(["", "Cites:", ...[...answer.nodes, ...answer.functions, ...answer.files].map((c) => `  - ${c}`)].join("\n"));
+  console.log(["", "Cites:", ...[...answer.nodes, ...answer.functions, ...answer.files, ...answer.commits.map((c) => `commit ${c.slice(0, 9)}`)].map((c) => `  - ${c}`)].join("\n"));
 }
 
 async function open(target: string, port: number, maxCalls: number): Promise<void> {
   const ws = workspace(target);
   const understanding = loadUnderstanding<Understanding>(ws.repoRoot, ws.sha);
-  const ask = (u: Understanding, request: { question: string } & AskOptions, onStep: (call: ToolCallLog) => void): Promise<Answer> => {
-    const { question, ...options } = request;
-    return runAsk(ws, u, question, options, maxCalls, onStep);
+  const ask = (u: Understanding, request: { question: string; node?: string; history?: AskOptions["history"] }, onStep: (call: ToolCallLog) => void, context?: ChangeContext): Promise<Answer> => {
+    const { question, node, history } = request;
+    return runAsk(ws, u, question, { ...(node ? { node } : {}), ...(history ? { history } : {}), ...(context ? { changes: context } : {}) }, maxCalls, onStep);
   };
   const { url } = await startDashboard({ ...ws, ...(understanding ? { understanding } : {}), open: openFromDashboard(ws, maxCalls), ask }, { port, preview: true });
   console.log(`Catchup dashboard: ${url}`);
@@ -461,7 +471,8 @@ export async function main(argvIn: string[]): Promise<number> {
   const { value: maxCallsValue, rest: afterMax } = option(afterOpen, "--max-calls");
   const { value: nodeValue, rest: afterNode } = option(afterMax, "--node");
   const { value: atValue, rest: afterAt } = option(afterNode, "--at");
-  const { value: fromValue, rest: argv } = option(afterAt, "--from");
+  const { value: fromValue, rest: afterFrom } = option(afterAt, "--from");
+  const { value: changesValue, rest: argv } = option(afterFrom, "--changes");
   const showNoise = argv.includes("--all");
   const [command, target = ".", label, ...more] = argv.filter((arg) => arg !== "--all");
   if (command === "explain") {
@@ -488,7 +499,7 @@ export async function main(argvIn: string[]): Promise<number> {
     if (label === undefined) throw new Error('usage: catchup ask <path> "<question>" [--node "<node id>"]');
     const maxCalls = maxCallsValue === undefined ? DEFAULT_MAX_TOOL_CALLS : Number(maxCallsValue);
     if (!Number.isInteger(maxCalls) || maxCalls < 0) throw new Error("--max-calls needs a number ≥ 0");
-    await askCommand(target, [label, ...more].join(" "), nodeValue, maxCalls);
+    await askCommand(target, [label, ...more].join(" "), nodeValue, changesValue, maxCalls);
     return 0;
   }
   if (command === "init") {
