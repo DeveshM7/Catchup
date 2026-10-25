@@ -64,7 +64,7 @@ _The live checklist. Tick boxes as you go. Each phase / build has a "done when" 
 
 # Roadmap (D35)
 
-Three parts, each finished before the next. Every build ends with its "done when" check, tests, typecheck, lint, and a Progress log line. **Current: Build 9.** Build 4 closed early by the user (D55).
+Three parts, each finished before the next. Every build ends with its "done when" check, tests, typecheck, lint, and a Progress log line. **All nine builds done** (Build 4 closed with known gaps, D55). Build 4 closed early by the user (D55).
 
 ## Part 1 — Understand
 
@@ -150,9 +150,9 @@ Three parts, each finished before the next. Every build ends with its "done when
 
 ### Build 9 — Timelapse A → B
 
-- [ ] Checkpoints between A and B (time-spaced + tags), oldest → newest
-- [ ] Union layout (`layout.json`); captions with commit citations
-- [ ] Player: play, scrub, added/changed/removed colors
+- [x] Checkpoints between A and B (time-spaced + tags), oldest → newest
+- [x] Union layout (stored in `timelapse/<from>..<to>.json`); captions with commit citations
+- [x] Player: play, scrub, added/changed/removed colors
 
 **Done when:** playing ai-chatbot from 2023 to now animates smoothly, nothing unchanged moves or gets renamed, and captions cite real commits.
 
@@ -211,3 +211,4 @@ _One line per session: date, what got done, what's next, anything surprising._
 - 2026-10-25 — Build 7 done (D58). `web/src/server/preview.ts` (watch → analyze working tree → offline evolve → change set), `/api/preview(+/canvas)`, Preview tab with change count. Offline mode in `evolve` (no Claude). Test: a real watcher on a temp repo sees v2's planted changes saved over v1 within 5 s. Checked in headless Chrome on the planted repo (behavior facts, new route, Redis, marked boxes) and timed on ai-chatbot: 3.2 s from save to updated preview. Next: Build 8 (Ask about changes).
 - 2026-10-25 — Build 8 done (D59). Ask takes a change context (change set + commits); commits are citable. Dashboard: asking from the Preview tab is about uncommitted work; `{from,to}` ranges for the timelapse. CLI: `ask --changes <from>..<to>`. Live through Droid on the planted repo: a commit-range question named the removed auth check and cited the commit; a Preview-tab question about an uncommitted edit found the leftover Redis client. Next: Build 9 (timelapse).
 - 2026-10-25 — Build 4 gap narrowed (D61): swallowed-error candidates in the facts and `hot.md`. tsup rerun (8 calls): surprises 4, all verified (dead exports, swallowed dts failures, `jsoncParse`, worker error detail). Added a README.
+- 2026-10-25 — Build 9 done (D60). `catchup timelapse` (checkpoints → trees evolved or fresh → change sets → cited captions → frames on one union layout), Timelapse tab (play, scrub, step; caption, impact, commit chips, counts, journeys; Ask about the step). ai-chatbot 2023-05 → 2026-07: 15 checkpoints picked from 576 commits, 12 built (3 skipped: one forbidden tool use blocked by the lock, two validation failures), 8 min; 0 unchanged boxes renamed, 42 cited commits all real, box positions identical in every frame (checked in headless Chrome); asking about the last step found the commit that brought Redis (`ad47aa0`). Fixes found on the way: digests inside worktrees (the agent inferred the main repo path from the digest folder), resuming half-written trees, rejections in run logs, zero journeys allowed when an app has only screens. Known limits: frames are drawn small (the union of 28 boxes sets the scale); a tree written fresh across a big rewrite starts new boxes (2023-07, 2025-04, 2026-07 show waves of additions).
