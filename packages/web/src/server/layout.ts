@@ -10,7 +10,7 @@ const BASE_HEIGHT = 40;
 
 type Unplaced = Omit<MapNode, "x" | "y" | "width" | "height">;
 
-export function nodeSize(label: string): { width: number; height: number } {
+function nodeSize(label: string): { width: number; height: number } {
   const lines = Math.max(1, Math.ceil((label.length * CHAR_WIDTH + 40) / WIDTH));
   return { width: WIDTH, height: BASE_HEIGHT + lines * LINE_HEIGHT };
 }

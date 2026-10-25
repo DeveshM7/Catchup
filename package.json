@@ -1,6 +1,9 @@
 {
   "name": "catchup",
+  "version": "0.1.0",
+  "description": "See what a codebase does, how it changed, and what your uncommitted changes will do.",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@12.15.0",
   "engines": {

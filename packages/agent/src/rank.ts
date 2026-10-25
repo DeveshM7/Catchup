@@ -25,7 +25,7 @@ function groupOf(label: string): string {
   return segments[0] ?? path;
 }
 
-export function flowScore(tree: CallTree): number {
+function flowScore(tree: CallTree): number {
   return tree.systems.length * 10 + componentsOf(tree).length * 2 + countImportant(tree.root);
 }
 

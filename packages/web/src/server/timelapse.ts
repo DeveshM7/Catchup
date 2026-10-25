@@ -16,7 +16,7 @@ const systemId = (name: string): string => `system:${name}`;
 type FrameGraph = { nodes: Map<string, { title: string; short: string; kind: "part" | "external"; color: number }>; links: Map<string, number> };
 
 /** Boxes in two frames are the same box when their files overlap this much (Jaccard, through renames). */
-export const SAME_BOX = 0.4;
+const SAME_BOX = 0.4;
 
 function jaccard(a: Set<string>, b: Set<string>): number {
   let shared = 0;

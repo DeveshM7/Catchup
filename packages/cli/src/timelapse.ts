@@ -8,7 +8,7 @@ import { changeSet, withCode, workspaceAt } from "./commits.js";
 /** Timelapse A → B (Build 9, D60): checkpoints oldest first, each tree evolved from the one before, captioned per step. */
 
 /** Below this share of files carried over from the previous checkpoint, a tree is written fresh instead of evolved. */
-export const MIN_OVERLAP = 0.5;
+const MIN_OVERLAP = 0.5;
 
 export type TreeAt = (repoRoot: string, sha: string, options: { maxCalls: number; from?: string; fresh?: boolean; quiet?: boolean }) => Promise<{ understanding: Understanding }>;
 

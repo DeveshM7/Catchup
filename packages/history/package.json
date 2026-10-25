@@ -2,12 +2,13 @@
   "name": "@catchup/history",
   "version": "0.0.0",
   "private": true,
-  "description": "Checkpoints, worktrees, renames, diffs.",
+  "description": "Git history: churn, worktrees, renames, commit ranges, checkpoints.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
-  }
+  },
+  "license": "MIT"
 }

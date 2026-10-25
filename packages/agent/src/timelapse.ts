@@ -5,11 +5,11 @@ import { checkCount, words } from "./treecheck.js";
 
 /** Timelapse captions (Build 9, D60): one short, cited caption per step between two checkpoints. */
 
-export const CAPTION_WORDS = { caption: { ask: 25, limit: 35 }, impact: { ask: 25, limit: 35 } } as const;
+const CAPTION_WORDS = { caption: { ask: 25, limit: 35 }, impact: { ask: 25, limit: 35 } } as const;
 const MAX_LISTED_COMMITS = 60;
 const SHORT = 7;
 
-export const TimelapseCaption = z.object({
+const TimelapseCaption = z.object({
   caption: z.string().min(1),
   impact: z.string().min(1),
   commits: z.array(z.string()),

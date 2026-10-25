@@ -128,7 +128,7 @@ export function systemsOfFunctions(work: Work, functions: string[]): string[] {
 }
 
 /** A family id as Claude wrote it, without heading decoration (`Family 2: \`id\``). */
-export const familyKey = (raw: string): string => raw.trim().replace(/^family\s+\d+\s*:\s*/i, "").replace(/^`+|`+$/g, "").trim();
+const familyKey = (raw: string): string => raw.trim().replace(/^family\s+\d+\s*:\s*/i, "").replace(/^`+|`+$/g, "").trim();
 
 /** Families (best first) that hold none of the journeys: the ones that get a line. */
 export function otherFamilies(work: Work, entries: string[]): Signals["families"] {
@@ -314,7 +314,7 @@ function buildSteps(work: Work, parent: UnderstandingNode, tree: CallTree, out: 
   });
 }
 
-export function topPartIds(work: Work): string[] {
+function topPartIds(work: Work): string[] {
   return Object.values(work.nodes)
     .filter((n) => n.kind === "part" && n.depth === 1)
     .map((n) => n.id);
@@ -331,7 +331,7 @@ function journeyOf(work: Work, node: UnderstandingNode): { journey: Understandin
 // ---------- Carry forward ----------
 
 /** Copies a node's descendants from the previous tree. */
-export function copyDescendants(work: Work, previous: Understanding, id: string): void {
+function copyDescendants(work: Work, previous: Understanding, id: string): void {
   const node = previous.nodes[id];
   if (!node || !Array.isArray(node.children)) return;
   for (const child of node.children) {

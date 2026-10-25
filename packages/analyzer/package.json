@@ -2,7 +2,7 @@
   "name": "@catchup/analyzer",
   "version": "0.0.0",
   "private": true,
-  "description": "Extract + structure + behavior (deterministic).",
+  "description": "Deterministic TypeScript/JavaScript analysis: facts, structure, call trees, signals.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -13,5 +13,6 @@
   "dependencies": {
     "dependency-cruiser": "^18.7.0",
     "typescript": "~6.0.3"
-  }
+  },
+  "license": "MIT"
 }

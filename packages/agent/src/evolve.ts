@@ -304,7 +304,7 @@ function buildUpdatedSteps(work: Work, before: Understanding, plan: JourneyPlan,
 
 // ---------- Relabel (one call) ----------
 
-export const RelabelOutput = z.object({
+const RelabelOutput = z.object({
   items: z.array(z.object({ key: z.string(), title: z.string().min(1), short: z.string().min(1), long: z.string().min(1) })),
   otherFlows: z.array(z.object({ family: z.string(), line: z.string().min(1) })),
 });

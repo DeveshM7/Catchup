@@ -5,7 +5,7 @@ import { readmeExcerpt, toolFunctions } from "./overview.js";
 import { LEGEND } from "./prompts.js";
 
 /** Journey candidates that get a `flow-<id>.md` digest: the top flow families' representatives. */
-export const JOURNEY_CANDIDATES = 6;
+const JOURNEY_CANDIDATES = 6;
 const HOT_FUNCTIONS = 30;
 const HOT_FILES = 20;
 const TREE_DEPTH = 3;
@@ -171,7 +171,7 @@ const MAX_UNUSED = 15;
 const MAX_SWALLOWING = 15;
 
 /** Functions whose own catch never throws, the ones most flows reach first (D61). */
-export function swallowingFunctions(inputs: Pick<DigestInputs, "facts" | "signals">): string[] {
+function swallowingFunctions(inputs: Pick<DigestInputs, "facts" | "signals">): string[] {
   return inputs.facts.functions
     .filter((fn) => fn.swallows)
     .map((fn) => ({ id: fn.id, flows: inputs.signals.functions[fn.id]?.flows ?? 0 }))

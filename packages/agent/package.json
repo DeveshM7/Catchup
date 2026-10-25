@@ -2,7 +2,7 @@
   "name": "@catchup/agent",
   "version": "0.0.0",
   "private": true,
-  "description": "Droid SDK calls, Zod schemas, validator.",
+  "description": "Claude passes (Droid SDK or Anthropic SDK), Zod schemas and validators, evolve, change sets, Ask, captions.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -17,5 +17,6 @@
     "@catchup/history": "workspace:*",
     "@factory/droid-sdk": "^0.10.0",
     "zod": "^3.25.76"
-  }
+  },
+  "license": "MIT"
 }

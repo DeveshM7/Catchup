@@ -64,7 +64,7 @@ _The live checklist. Tick boxes as you go. Each phase / build has a "done when" 
 
 # Roadmap (D35)
 
-Three parts, each finished before the next. Every build ends with its "done when" check, tests, typecheck, lint, and a Progress log line. **All nine builds done** (Build 4 closed with known gaps, D55). Build 4 closed early by the user (D55).
+Three parts, each finished before the next. Every build ends with its "done when" check, tests, typecheck, lint, and a Progress log line. **All nine builds done** (Build 4 closed early with known gaps, D55).
 
 ## Part 1 — Understand
 
@@ -163,15 +163,15 @@ Three parts, each finished before the next. Every build ends with its "done when
 
 ```
 catchup/
-  AGENTS.md          read by Droid on every task
+  AGENTS.md          rules for coding agents working on this repo
   docs/              SPEC, ARCHITECTURE, DECISIONS, PLAN (this file)
   packages/
     analyzer/        extract + structure + behavior (deterministic)
     history/         checkpoints, worktrees, renames, diffs
-    agent/           Droid SDK calls, Zod schemas, validator
-    store/           JSON files or SpacetimeDB module
-    web/             dashboard
-    cli/             catchup init | backfill | watch | open
+    agent/           Claude passes (Droid SDK or Anthropic SDK), Zod schemas, validators, evolve, change sets
+    store/           JSON files in <repo>/.catchup/
+    web/             dashboard server and React UI
+    cli/             catchup init | understand | open | flow | ask | diff | timelapse
   fixtures/          demo repos (gitignored) + tiny test repos (committed)
 ```
 

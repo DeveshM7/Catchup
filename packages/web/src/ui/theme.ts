@@ -1,5 +1,5 @@
 /** Archify-like palette: a strong border/text color and a soft fill per slot. */
-export const PALETTE = [
+const PALETTE = [
   { c: "#0f9f87", bg: "#e8f7f3" },
   { c: "#3b7ddd", bg: "#eaf1fd" },
   { c: "#8257e6", bg: "#f2edfd" },
@@ -10,7 +10,7 @@ export const PALETTE = [
   { c: "#5f6f86", bg: "#f0f3f7" },
 ] as const;
 
-export const SYSTEM = { c: "#e0702a", bg: "#fff1e6" } as const;
+const SYSTEM = { c: "#e0702a", bg: "#fff1e6" } as const;
 
 export function colorOf(slot: number): { c: string; bg: string } {
   if (slot < 0) return SYSTEM;

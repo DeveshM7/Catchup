@@ -1,6 +1,6 @@
 import type { AreasOutput, FlowOutput, LabelsOutput } from "./schemas.js";
 
-export const MAX_STEPS = 8;
+const MAX_STEPS = 8;
 const MIN_STEPS = 4;
 
 export type FlowCheck = {

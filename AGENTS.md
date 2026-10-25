@@ -33,7 +33,7 @@ Catchup computes a repo's architecture and runtime flows from code + git history
 - Test: `pnpm test`
 - Typecheck: `pnpm typecheck`
 - Lint: `pnpm lint`
-- Run on a repo: `pnpm catchup init <path>` (once the CLI exists)
+- Run on a repo: `pnpm catchup init <path>`, then `pnpm catchup understand <path>` and `pnpm catchup open <path>`
 
 ## When you finish a task
 

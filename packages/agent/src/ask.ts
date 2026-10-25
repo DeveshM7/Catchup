@@ -7,8 +7,8 @@ import { checkCount, words } from "./treecheck.js";
 
 /** Ask (Build 5, D56): a read-only agent answers a question about the code; every cite is checked against the facts. */
 
-export const ANSWER_WORDS = { ask: 150, limit: 220 } as const;
-export const MAX_CITES = 8;
+const ANSWER_WORDS = { ask: 150, limit: 220 } as const;
+const MAX_CITES = 8;
 const MAX_HISTORY = 3;
 const MAX_LISTED_FILES = 40;
 
@@ -147,7 +147,7 @@ function commitOf(cite: string, commits: { sha: string }[] | undefined): string 
 }
 
 /** A cite as written, without the decoration Claude copies from the map (`[id]`, backticks, `()`). */
-export const citeKey = (raw: string): string => raw.trim().replace(/^[[`]+|[\]`]+$/g, "").replace(/\(\)$/, "").trim();
+const citeKey = (raw: string): string => raw.trim().replace(/^[[`]+|[\]`]+$/g, "").replace(/\(\)$/, "").trim();
 
 /** Problems with an answer; empty when every cite resolves. */
 export function checkAnswer(out: AskOutput, facts: Facts, u: Understanding, commits?: { sha: string }[]): string[] {

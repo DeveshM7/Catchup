@@ -23,14 +23,14 @@ type Props = {
 };
 
 /** Files a box stands for, so a selection elsewhere can light it. */
-export function boxFiles(box: string, data: TreeData): string[] {
+function boxFiles(box: string, data: TreeData): string[] {
   if (box.startsWith("file:")) return [box.slice("file:".length)];
   const node = data.nodes[box];
   return node?.kind === "part" ? node.files : [];
 }
 
 /** Box content by familiarity: Claude's title and short line, or code names and counts for experts. */
-export const boxBody =
+const boxBody =
   (data: TreeData, mode: Familiarity) =>
   (n: MapNode): ReactNode => {
     if (n.kind === "file") {

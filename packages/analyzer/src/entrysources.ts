@@ -53,7 +53,7 @@ function functionIdOf(ctx: Ctx, expr: ts.Expression): string | undefined {
 }
 
 /** Export name → function id for a module's exports (following re-exports). */
-export function exportedFunctions(ctx: Ctx, sourceFile: ts.SourceFile): Map<string, string> {
+function exportedFunctions(ctx: Ctx, sourceFile: ts.SourceFile): Map<string, string> {
   const found = new Map<string, string>();
   const moduleSymbol = ctx.checker.getSymbolAtLocation(sourceFile);
   if (!moduleSymbol) return found;

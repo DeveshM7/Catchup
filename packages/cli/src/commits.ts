@@ -67,7 +67,7 @@ export function loadWorkspace(repoRoot: string, dir: string, sha: string): Works
 export const workspaceAt = async (repoRoot: string, dir: string, sha: string): Promise<Workspace> => loadWorkspace(repoRoot, dir, sha) ?? analyzeAt(repoRoot, dir, sha);
 
 /** Commits with a stored understanding tree. */
-export function treeCommits(repoRoot: string): string[] {
+function treeCommits(repoRoot: string): string[] {
   const dir = join(repoRoot, CATCHUP_DIR, "understanding");
   return existsSync(dir) ? readdirSync(dir).flatMap((f) => (f.endsWith(".json") ? [f.slice(0, -".json".length)] : [])) : [];
 }

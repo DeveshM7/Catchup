@@ -2,7 +2,7 @@
   "name": "@catchup/cli",
   "version": "0.0.0",
   "private": true,
-  "description": "catchup init | backfill | watch | open.",
+  "description": "Command line: init, understand, open, flow, ask, diff, timelapse.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -16,5 +16,6 @@
     "@catchup/history": "workspace:*",
     "@catchup/store": "workspace:*",
     "@catchup/web": "workspace:*"
-  }
+  },
+  "license": "MIT"
 }

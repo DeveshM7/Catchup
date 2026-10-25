@@ -33,7 +33,7 @@ export function mainFlows(trees: CallTree[]): MainFlow[] {
     .map((family) => ({ family, tree: byEntry.get(family.representative)! }));
 }
 
-export function dirOf(file: string): string {
+function dirOf(file: string): string {
   const at = file.lastIndexOf("/");
   return at === -1 ? "." : file.slice(0, at);
 }

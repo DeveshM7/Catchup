@@ -87,18 +87,6 @@ export function renderTree(tree: CallTree, inputs: BriefInputs): string {
   return lines.join("\n");
 }
 
-/** Function IDs shown in the brief (not noise), in tree order. */
-export function visibleFunctions(tree: CallTree): string[] {
-  const seen = new Set<string>();
-  const walk = (node: TreeNode): void => {
-    if (node.kind !== "function" || node.importance === "noise") return;
-    seen.add(node.fn);
-    node.children.forEach(walk);
-  };
-  walk(tree.root);
-  return [...seen];
-}
-
 /** Every function ID in the tree, noise included. */
 export function treeFunctions(tree: CallTree): Set<string> {
   const seen = new Set<string>();

@@ -32,7 +32,7 @@ export function folderName(files: string[]): string {
  * Otherwise (Claude often carves several parts out of one folder) its busiest file: siblings split their parent's
  * files, so that never repeats.
  */
-export function partName(node: NodeView, data: TreeData): string {
+function partName(node: NodeView, data: TreeData): string {
   const folder = folderName(node.files);
   const parent = node.parent ? data.nodes[node.parent] : undefined;
   const ids = parent ? (Array.isArray(parent.children) ? parent.children : []) : data.parts;
@@ -95,7 +95,7 @@ export function journeyOf(id: string, data: TreeData): NodeView | undefined {
 }
 
 /** The most specific part holding a file. */
-export function deepestPart(file: string, data: TreeData): NodeView | undefined {
+function deepestPart(file: string, data: TreeData): NodeView | undefined {
   let found: NodeView | undefined;
   let level = data.parts.flatMap((id) => data.nodes[id] ?? []);
   for (;;) {

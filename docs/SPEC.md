@@ -1,6 +1,6 @@
 # Catchup — Product Spec
 
-_Working name. Last updated: 2026-10-25. Roadmap in D35._
+_Last updated: 2026-10-25. Roadmap in D35; every part below is built (see `PLAN.md`)._
 
 ## One line
 
@@ -28,7 +28,7 @@ Any developer on a repo: someone new who needs the big picture fast, and the per
 
 ### Part 2 — Ask (Build 5)
 
-- Ask in a general chat, or on any box. A read-only agent answers, citing functions, files and (later) commits; the boxes it talks about are highlighted on the diagram.
+- Ask in a general chat, or on any box. A read-only agent answers, citing boxes, functions, files and commits; the boxes it talks about are highlighted on the diagram.
 
 ### Part 3 — Changes (Builds 6–9)
 
@@ -43,7 +43,9 @@ A local web dashboard (`catchup open`), Archify-inspired look (D28):
 
 - **Home:** one sentence on what the app is, the top parts diagram, the main journeys, where to start reading.
 - **Architecture** and **Flows** tabs over the same tree, with breadcrumbs and a side panel (text, code links, Ask).
-- Later: **Preview** (changes first) and **Timelapse**.
+- **Preview:** uncommitted changes, behavior first, re-analyzed on every save.
+- **Timelapse:** the code's history between two commits, with a cited caption per step.
+- **Ask:** a chat beside every view, about the code or about a change.
 
 ## Scope now
 
@@ -62,9 +64,7 @@ A local web dashboard (`catchup open`), Archify-inspired look (D28):
 - **Stable:** a re-run on the same commit changes nothing; across commits, unchanged boxes keep ID, text and position.
 - **General:** the same pipeline gives a sensible tree on a non-web TS repo without repo-specific rules.
 
-## Hackathon notes (Cal Hacks 13.0)
-
-No deadline now (D35); kept for reference.
+## Hackathon (Cal Hacks 13.0)
 
 | Track | Fit |
 | --- | --- |

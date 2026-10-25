@@ -2,7 +2,7 @@
   "name": "@catchup/store",
   "version": "0.0.0",
   "private": true,
-  "description": "Snapshot storage (local JSON in .catchup/).",
+  "description": "Local JSON storage under <repo>/.catchup/.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -12,5 +12,6 @@
   },
   "dependencies": {
     "@catchup/analyzer": "workspace:*"
-  }
+  },
+  "license": "MIT"
 }
